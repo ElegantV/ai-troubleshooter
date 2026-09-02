@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 问题排查助手 · 原型</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Microsoft YaHei", system-ui, sans-serif; background: #f0f4f8; color: #1f2937; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 24px 16px 64px; }
+  header h1 { font-size: 22px; color: #1e3a8a; }
+  header .sub { color: #6b7280; font-size: 13px; margin-top: 4px; }
+  .chips { margin: 12px 0 4px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { background: #fff; border: 1px solid #dbeafe; color: #1e40af; font-size: 12px; padding: 3px 10px; border-radius: 999px; }
+  .chip.warn { border-color: #fecaca; color: #b91c1c; background: #fef2f2; }
+  .nav { display: flex; gap: 4px; margin-top: 16px; border-bottom: 2px solid #e5e7eb; }
+  .nav a { padding: 9px 18px; font-size: 14px; cursor: pointer; color: #6b7280; border-radius: 8px 8px 0 0; text-decoration: none; }
+  .nav a.on { color: #1d4ed8; font-weight: 600; background: #fff; border: 2px solid #e5e7eb; border-bottom: 2px solid #fff; margin-bottom: -2px; }
+  .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin-top: 14px; }
+  textarea { width: 100%; height: 84px; border: 1px solid #d1d5db; border-radius: 8px; padding: 10px; font-size: 14px; resize: vertical; font-family: inherit; }
+  textarea:focus, input:focus, select:focus { outline: 2px solid #93c5fd; border-color: #3b82f6; }
+  .row { display: flex; gap: 8px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
+  button.primary { background: #1d4ed8; color: #fff; border: none; border-radius: 8px; padding: 9px 22px; font-size: 14px; cursor: pointer; }
+  button.primary:disabled { opacity: .5; cursor: wait; }
+  button.primary:hover { background: #1e40af; }
+  .examples { font-size: 12px; color: #6b7280; }
+  .examples a { color: #2563eb; margin-right: 8px; cursor: pointer; text-decoration: none; }
+  .examples a:hover { text-decoration: underline; }
+  .summary { border-left: 4px solid #10b981; background: #ecfdf5; padding: 10px 12px; border-radius: 6px; font-size: 14px; line-height: 1.6; }
+  .summary.low { border-color: #f59e0b; background: #fffbeb; }
+  .summary.none { border-color: #9ca3af; background: #f9fafb; }
+  .summary .tag { font-size: 12px; font-weight: bold; margin-right: 6px; color: #047857; }
+  .summary.low .tag { color: #b45309; } .summary.none .tag { color: #4b5563; }
+  .llm { margin-top: 8px; font-size: 13px; color: #374151; background:#f5f3ff; border-left: 4px solid #8b5cf6; padding: 8px 10px; border-radius: 6px; }
+  h3 { font-size: 14px; color: #1e3a8a; margin: 18px 0 8px; }
+  ul.plain { list-style: none; }
+  ul.plain li { font-size: 13px; line-height: 1.7; padding: 3px 0 3px 14px; position: relative; }
+  ul.plain li::before { content: ""; position: absolute; left: 0; top: 12px; width: 6px; height: 6px; border-radius: 50%; background: #93c5fd; }
+  .cause { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+  .cause .head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .cause .title { font-size: 13.5px; font-weight: 600; }
+  .badge { font-size: 11px; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+  .badge.high { background: #fee2e2; color: #b91c1c; }
+  .badge.mid { background: #fef3c7; color: #92400e; }
+  .badge.low { background: #e5e7eb; color: #4b5563; }
+  .badge.blue { background: #dbeafe; color: #1e40af; }
+  .cause .type { font-size: 11px; color: #6b7280; margin-top: 2px; }
+  .cause ul.plain li { color: #4b5563; }
+  pre.sql { background: #0f172a; color: #e2e8f0; padding: 10px 12px; border-radius: 8px; font-size: 12.5px; overflow-x: auto; line-height: 1.5; margin: 4px 0 10px; }
+  .sql-purpose { font-size: 12.5px; color: #334155; font-weight: 600; }
+  ol.steps { padding-left: 20px; } ol.steps li { font-size: 13.5px; line-height: 1.8; }
+  .src { font-size: 12px; color: #6b7280; margin-top: 6px; }
+  .fb { margin-top: 18px; padding-top: 14px; border-top: 1px dashed #e5e7eb; }
+  .fb .btns button { margin-right: 8px; }
+  .fb button { border: 1px solid #d1d5db; background: #fff; border-radius: 8px; padding: 7px 14px; font-size: 13px; cursor: pointer; }
+  .fb button:hover { border-color: #3b82f6; color: #1d4ed8; }
+  .fb input { flex: 1; min-width: 240px; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #111827; color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 13px; display: none; z-index: 9; max-width: 80%; }
+  .toast.err { background: #b91c1c; }
+  .empty { color: #9ca3af; font-size: 13px; text-align: center; padding: 30px 0; }
+  .foot { margin-top: 20px; font-size: 11.5px; color: #9ca3af; text-align: center; line-height: 1.8; }
+  /* 案例库 */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .form-grid .full { grid-column: 1 / -1; }
+  .field label { display: block; font-size: 12.5px; color: #374151; font-weight: 600; margin-bottom: 4px; }
+  .field label .req { color: #dc2626; }
+  .field input, .field select, .field textarea { width: 100%; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 10px; font-size: 13px; font-family: inherit; }
+  .field textarea { height: 68px; }
+  .hint { font-size: 12px; color: #6b7280; margin-top: 10px; line-height: 1.7; }
+  .auto-note { font-size: 12px; color: #047857; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; padding: 8px 10px; margin-top: 10px; display: none; line-height: 1.7; }
+  .case-card { border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px 14px; margin-top: 10px; }
+  .case-card .head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .case-card .title { font-size: 14px; font-weight: 600; color: #111827; }
+  .case-card .meta { font-size: 11px; color: #9ca3af; }
+  .case-card .body { font-size: 13px; line-height: 1.75; margin-top: 6px; }
+  .case-card .body b { color: #374151; }
+  .tags { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 5px; }
+  .tagm { font-size: 11px; background: #eff6ff; color: #1d4ed8; border-radius: 999px; padding: 1px 9px; }
+  .hidden { display: none; }
+  .err-box { border: 1px solid #fecaca; background: #fef2f2; color: #b91c1c; border-radius: 8px; padding: 8px 12px; font-size: 13px; margin-top: 8px; display: none; }
+  /* 表结构展示 */
+  table.st { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
+  table.st th { text-align: left; background: #f1f5f9; color: #334155; padding: 4px 8px; border: 1px solid #e2e8f0; font-weight: 600; }
+  table.st td { padding: 3px 8px; border: 1px solid #e2e8f0; color: #475569; }
+  table.st td:first-child { font-family: Consolas, monospace; color: #0f172a; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🔍 AI 问题排查助手 <span style="font-size:13px;color:#9ca3af;font-weight:normal">原型 v0.2</span></h1>
+    <div class="sub">面向数据异常与批量作业失败场景 · 血缘/链路/案例关联分析 · 规则归因（LLM 接口已预留）</div>
+    <div class="chips" id="chips">知识库加载中…</div>
+  </header>
+
+  <div class="nav">
+    <a id="tab-trouble" class="on" onclick="switchTab('trouble')">智能排查</a>
+    <a id="tab-graph" onclick="switchTab('graph')">能力图示（血缘 / 链路 / 案例）</a>
+    <a id="tab-cases" onclick="switchTab('cases')">案例库（录入 / 浏览）</a>
+  </div>
+
+  <!-- ============ 能力图示 ============ -->
+  <div id="view-graph" class="hidden">
+    <div class="panel">
+      <h3 style="margin-top:0">🧭 三大关联能力是什么</h3>
+      <div class="form-grid">
+        <div class="case-card"><div class="head"><div class="title">🔗 血缘关联（表级血缘）</div></div>
+          <div class="body">解析存储过程 SQL 得到"<b>源表 → 加工 → 目标表</b>"的依赖关系网。<br><b>回答的问题：</b>这张表的数据从哪来、被哪些下游用？<br><b>功能体现：</b>数据异常时，把单表问题放大为整条数据链的逐层核查路径，并支撑"改一张表影响哪些报表"的影响分析。</div></div>
+        <div class="case-card"><div class="head"><div class="title">⛓ 作业链路（调度 DAG）</div></div>
+          <div class="body">从调度系统采集作业间依赖，形成跑批执行顺序图。<br><b>回答的问题：</b>作业失败根因在哪一级、下游哪些作业被连带？<br><b>功能体现：</b>失败作业向上回溯根因（上游失败/延迟），向下评估级联影响（哪些作业被跳过、哪些表没产出），并生成按序重跑清单。</div></div>
+        <div class="case-card"><div class="head"><div class="title">📚 案例关联（工单/案例库）</div></div>
+          <div class="body">历史工单与已解决问题沉淀为结构化案例（现象/根因/处置），按<b>错误码 + 关联作业 + 关联表</b>三重加权检索。<br><b>回答的问题：</b>以前谁遇到过类似问题、怎么解决的？<br><b>功能体现：</b>把个人经验变成团队资产；用户反馈确认后自动沉淀新案例，越用越准。</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3 style="margin-top:0">🗺 血缘 × 链路关系图（当前知识库真实数据）</h3>
+      <div class="hint">上层为调度作业链路（蓝，箭头=依赖："被指向者依赖指向者"），下层为表级血缘（绿，箭头=数据流："源表 → 目标表"），灰色虚线=作业加工产出表。悬停可查看说明。</div>
+      <div id="lineageSvg" style="overflow-x:auto"></div>
+    </div>
+
+    <div class="panel">
+      <h3 style="margin-top:0">🎯 关联分析真实演示（基于知识库当前数据）</h3>
+      <div id="demoCards"><div class="empty">加载中…</div></div>
+    </div>
+  </div>
+
+  <!-- ============ 智能排查 ============ -->
+  <div id="view-trouble">
+    <div class="panel">
+      <textarea id="input" style="height:120px" placeholder="不限输入类型，系统自动识别：① 粘贴存储过程/SQL 片段（解析血缘+静态风险分析）② 异常表名/字段名（数据异常排查）③ 失败作业名/报错日志（作业失败排查）"></textarea>
+      <div class="row">
+        <button class="primary" id="btn" onclick="go()">开始分析</button>
+        <span class="examples">示例：
+          <a onclick="fillProc()">存储过程分析</a>
+          <a onclick="fill('job_dwd_txnl_clean 昨晚失败了，报 ORA-01400，下游日报也没生成')">作业失败排查</a>
+          <a onclick="fill('dws_cust_asset_d 昨天数据量骤降，客户资产汇总缺失')">数据异常排查</a>
+          <a onclick="fill('cust_id 这个字段昨天好多空的')">仅字段输入</a>
+          <a onclick="fill('job_dws_asset_agg 晚上失败了，报 ORA-00060 死锁')">死锁排查</a>
+          <a onclick="fill('job_ods_cust_info_load 昨天文件超时失败')">文件超时排查</a>
+        </span>
+      </div>
+    </div>
+    <div id="result"></div>
+  </div>
+
+  <!-- ============ 案例库 ============ -->
+  <div id="view-cases" class="hidden">
+    <div class="panel">
+      <h3 style="margin-top:0">📥 录入已有案例（把已解决的问题沉淀进知识库，后续排查自动关联）</h3>
+      <div class="form-grid">
+        <div class="field full"><label>案例标题 <span class="req">*</span></label><input id="c_title" placeholder="如：job_dws_asset_agg 死锁失败 ORA-00060"></div>
+        <div class="field full"><label>问题现象 <span class="req">*</span></label><textarea id="c_symptom" placeholder="何时、什么作业/表、什么表现（报错信息、数据表现、影响范围）"></textarea></div>
+        <div class="field full"><label>根因分析 <span class="req">*</span></label><textarea id="c_root" placeholder="定位到的根本原因"></textarea></div>
+        <div class="field full"><label>解决方式 / 处置步骤 <span class="req">*</span></label><textarea id="c_solution" placeholder="分步骤描述处理过程，如：1. …；2. …；3. …"></textarea></div>
+        <div class="field"><label>错误码</label><input id="c_code" list="codeList" placeholder="如 ORA-00060，可留空自动识别"><datalist id="codeList"></datalist></div>
+        <div class="field"><label>关联作业（逗号分隔，可留空自动识别）</label><input id="c_jobs" list="jobList" placeholder="job_dws_asset_agg, job_dwd_txnl_clean"><datalist id="jobList"></datalist></div>
+        <div class="field full"><label>关联表（逗号分隔，可留空自动识别）</label><input id="c_tables" list="tableList" placeholder="dws_cust_asset_d, dim_cust"><datalist id="tableList"></datalist></div>
+      </div>
+      <div class="hint">提示：标题、现象、根因、解决方式为必填；关联作业/表/错误码留空时，系统会从您填写的文本中自动识别。录入后立即参与智能排查的案例检索与匹配。</div>
+      <div class="err-box" id="c_err"></div>
+      <div class="row">
+        <button class="primary" id="c_btn" onclick="submitCase()">提交案例</button>
+        <button id="c_reset" onclick="resetCaseForm()" style="border:1px solid #d1d5db;background:#fff;border-radius:8px;padding:9px 18px;font-size:14px;cursor:pointer">清空</button>
+        <span class="auto-note" id="c_auto"></span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3 style="margin-top:0">📚 案例列表（<span id="caseCount">0</span> 条，含人工录入与反馈沉淀）</h3>
+      <div id="caseList"><div class="empty">加载中…</div></div>
+    </div>
+  </div>
+
+  <div class="foot">知识来源：表级血缘 × 作业链路 × 跑批日志 × 历史工单/案例 · 验证 SQL 仅供人工只读执行 · 所有查询已审计留痕</div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const SAMPLE_PROC = `INSERT INTO dwd_txnl_detail_d
+    (txnl_id, cust_id, acct_no, txnl_type, txnl_amt, txnl_dt, data_dt)
+SELECT t.txnl_id, c.cust_id, t.acct_no, t.txnl_type, t.txnl_amt, t.txnl_dt, '20260903'
+FROM ods_txnl_detail t
+LEFT JOIN dim_cust c ON t.acct_no = c.acct_no;`;
+function fill(t) { switchTab('trouble'); $('input').value = t; go(); }
+function fillProc() { switchTab('trouble'); $('input').value = SAMPLE_PROC; go(); }
+function toast(msg, err) { const t = $('toast'); t.textContent = msg; t.className = 'toast' + (err ? ' err' : ''); t.style.display = 'block'; setTimeout(() => t.style.display = 'none', 3600); }
+function switchTab(tab) {
+  $('view-trouble').className = tab === 'trouble' ? '' : 'hidden';
+  $('view-graph').className = tab === 'graph' ? '' : 'hidden';
+  $('view-cases').className = tab === 'cases' ? '' : 'hidden';
+  $('tab-trouble').className = tab === 'trouble' ? 'on' : '';
+  $('tab-graph').className = tab === 'graph' ? 'on' : '';
+  $('tab-cases').className = tab === 'cases' ? 'on' : '';
+  if (tab === 'cases') { loadCases(); loadDict(); }
+  if (tab === 'graph') loadGraphView();
+}
+
+fetch('/api/meta').then(r => r.json()).then(m => {
+  let html = `<span class="chip">表 ${m.tables} 张</span><span class="chip">作业 ${m.jobs} 个</span><span class="chip">血缘边 ${m.lineageEdges} 条</span><span class="chip">历史工单 ${m.tickets} 条</span><span class="chip">案例 ${m.cases} 条</span><span class="chip">最新跑批日 ${m.latestRunDate}</span>`;
+  for (const j of m.abnormalJobs) html += `<span class="chip">⚠ ${j.job_name}: ${j.final_status}</span>`;
+  $('chips').innerHTML = html;
+});
+
+/* ---------- 能力图示 ---------- */
+async function loadGraphView() {
+  const [g, d] = await Promise.all([fetch('/api/graph').then(r => r.json()), fetch('/api/demos').then(r => r.json())]);
+  $('demoCards').innerHTML = [d.lineageDemo, d.chainDemo, d.caseDemo].map(x => `
+    <div class="case-card"><div class="head"><div class="title">${esc(x.title)}</div>
+      <button style="border:1px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:8px;padding:4px 12px;font-size:12px;cursor:pointer" onclick="fill('${x.try}')">▶ 试一试</button></div>
+      <div class="body"><b>场景：</b>${esc(x.scenario)}<br><b>关联过程：</b></div>
+      <ul class="plain">${x.steps.map(s => `<li>${esc(s)}</li>`).join('')}</ul>
+      <div class="body"><b>怎么用：</b>${esc(x.usage)}</div></div>`).join('');
+  renderLineageSvg(g);
+}
+
+function renderLineageSvg(g) {
+  const layers = ['ODS', 'DIM', 'DWD', 'DWS', 'ADS'];
+  const colX = i => 40 + i * 246;
+  const pos = {};
+  const jobsBy = {}, tablesBy = {};
+  g.jobs.forEach(j => (jobsBy[j.layer] = jobsBy[j.layer] || []).push(j));
+  g.tables.forEach(t => (tablesBy[t.layer] = tablesBy[t.layer] || []).push(t));
+  layers.forEach((L, i) => {
+    (jobsBy[L] || []).forEach((j, k) => pos['j:' + j.name] = { x: colX(i), y: 34 + k * 48, w: 200, h: 38, kind: 'j', desc: `${j.desc}（${j.schedule}）` });
+    (tablesBy[L] || []).forEach((t, k) => pos['t:' + t.name] = { x: colX(i), y: 260 + k * 46, w: 200, h: 34, kind: 't', desc: t.comment });
+  });
+  const escX = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  const box = (k) => { const p = pos[k]; const label = k.slice(2);
+    return `<g><title>${escX(p.desc || '')}</title><rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" rx="7" fill="${p.kind === 'j' ? '#eff6ff' : '#ecfdf5'}" stroke="${p.kind === 'j' ? '#3b82f6' : '#10b981'}" stroke-width="1.4"/>
+    <text x="${p.x + p.w / 2}" y="${p.y + p.h / 2 + 4}" text-anchor="middle" font-size="11.5" fill="${p.kind === 'j' ? '#1e40af' : '#065f46'}" font-family="Consolas,monospace">${escX(label)}</text></g>`; };
+  const edge = (a, b, color, dash, fromRight) => {
+    const x1 = fromRight ? a.x + a.w : a.x + a.w, y1 = a.y + a.h / 2;
+    const x2 = b.x, y2 = b.y + b.h / 2;
+    if (!fromRight) { // 从盒子下侧出/上侧入（垂直连线）
+      const ax = a.x + a.w / 2, bx = b.x + b.w / 2;
+      return `<path d="M ${ax} ${a.y + a.h} C ${ax} ${(a.y + a.h + b.y) / 2}, ${bx} ${(a.y + a.h + b.y) / 2}, ${bx} ${b.y}" fill="none" stroke="${color}" stroke-width="1.4" ${dash ? 'stroke-dasharray="4,3"' : ''} marker-end="url(#arw)" opacity="0.65"><title>${escX(a.desc || '')} → ${escX(b.desc || '')}</title></path>`;
+    }
+    const mx = (x1 + x2) / 2;
+    return `<path d="M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}" fill="none" stroke="${color}" stroke-width="1.4" ${dash ? 'stroke-dasharray="4,3"' : ''} marker-end="url(#arw)" opacity="0.65"><title>${escX(a.desc || '')} → ${escX(b.desc || '')}</title></path>`;
+  };
+  let edges = '';
+  g.jobDeps.forEach(d => { const a = pos['j:' + d.depends_on], b = pos['j:' + d.job_name]; if (a && b) edges += edge(a, b, '#2563eb', false, true); });
+  g.tlineage.forEach(e => { const a = pos['t:' + e.src], b = pos['t:' + e.tgt]; if (a && b) edges += edge(a, b, '#059669', false, true).replace('url(#arw)', 'url(#arwg)'); });
+  g.tlineage.forEach(e => {
+    const j = pos['j:' + e.job], t = pos['t:' + e.tgt], s = pos['t:' + e.src];
+    if (j && t && !(s && false)) edges += edge(j, t, '#94a3b8', true, false);
+    if (s && j) edges += edge(s, j, '#cbd5e1', true, false);
+  });
+  const W = 40 + 4 * 246 + 220, H = 260 + Math.max(...Object.values(pos).filter(p => p.kind === 't').map(p => p.y + p.h)) - 260 + 20;
+  $('lineageSvg').innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${Math.min(W, 1180)}" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="arw" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="#2563eb"/></marker>
+      <marker id="arwg" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="#059669"/></marker>
+    </defs>
+    ${layers.map((L, i) => `<text x="${colX(i) + 100}" y="20" text-anchor="middle" font-size="12" font-weight="bold" fill="#94a3b8">${L}</text>`).join('')}
+    ${edges}${Object.keys(pos).map(box).join('')}
+  </svg>`;
+}
+
+/* ---------- 智能排查 ---------- */
+async function go() {
+  const text = $('input').value.trim();
+  if (!text) return toast('请输入异常描述', true);
+  $('btn').disabled = true;
+  $('result').innerHTML = '<div class="panel"><div class="empty">排查中…（实体识别 → 血缘/链路分析 → 案例检索 → 归因）</div></div>';
+  try {
+    const r = await fetch('/api/troubleshoot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) }).then(r => r.json());
+    if (r.error) { $('result').innerHTML = `<div class="panel"><div class="empty">${r.error}</div></div>`; return; }
+    render(r);
+  } catch (e) { $('result').innerHTML = `<div class="panel"><div class="empty">请求失败：${e.message}</div></div>`; }
+  $('btn').disabled = false;
+}
+
+function render(r) {
+  const cls = r.confidence === '高' ? '' : r.confidence === '中' ? 'low' : 'none';
+  const conf = { '高': 'high', '中': 'mid', '低': 'low', '无法判断': 'low' };
+  let h = `<div class="panel">
+    <div class="summary ${cls}"><span class="tag">结论 · 置信度${r.confidence}</span>${r.summary}</div>
+    ${r.llmSummary ? `<div class="llm">🤖 AI 归纳：${r.llmSummary}</div>` : ''}`;
+
+  for (const s of r.sections) {
+    if (s.key === 'causes') {
+      if (!s.causes.length) continue;
+      h += `<h3>📌 ${s.title}</h3>`;
+      for (const c of s.causes) {
+        h += `<div class="cause"><div class="head"><div class="title">${c.title}</div><span class="badge ${conf[c.confidence] || 'low'}">${c.confidence} · ${c.score}</span></div>
+              <div class="type">归因途径：${c.type}</div><ul class="plain">${c.evidence.map(e => `<li>${esc(e)}</li>`).join('')}</ul></div>`;
+      }
+    } else if (s.key === 'sql') {
+      if (!s.sqls.length) continue;
+      h += `<h3>🧪 ${s.title}</h3>`;
+      for (const q of s.sqls) h += `<div class="sql-purpose">${q.purpose}</div><pre class="sql">${esc(q.sql)}</pre>`;
+    } else if (s.key === 'solution') {
+      h += `<h3>🛠 建议处置步骤</h3><ol class="steps">${s.items.map(i => `<li>${esc(i)}</li>`).join('')}</ol>
+            ${s.source ? `<div class="src">依据：${esc(s.source)}</div>` : ''}`;
+    } else if (s.key === 'impact') {
+      h += `<h3>🌐 ${s.title}</h3><ul class="plain">${s.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>`;
+    } else if (s.key === 'structures') {
+      h += `<h3>🗄 ${s.title}</h3>`;
+      for (const t of s.tables) {
+        h += `<div class="cause"><div class="head"><div class="title">▤ ${esc(t.name)}</div><span class="badge ${t.inKb ? 'blue' : 'low'}">${t.inKb ? '在库' : '知识库外'}</span></div>
+              <div class="type">${esc(t.comment)}</div>`;
+        if (t.columns.length) h += `<table class="st"><tr><th>列</th><th>类型</th><th>约束</th><th>说明</th></tr>${t.columns.map(c => `<tr><td>${esc(c[0])}</td><td>${esc(c[1])}</td><td>${esc(c[2])}</td><td>${esc(c[3])}</td></tr>`).join('')}</table>`;
+        h += `</div>`;
+      }
+    } else if (s.key === 'refs' && s.items.length) {
+      h += `<h3>📚 参考案例</h3><ul class="plain">${s.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>`;
+    }
+  }
+
+  h += `<div class="fb"><div style="font-size:13px;font-weight:600;margin-bottom:8px">本次排查是否帮助你定位问题？（确认后自动沉淀案例，持续提升准确率）</div>
+        <div class="row"><button onclick="fb('${r.query_id}','yes')">👍 有帮助</button>
+        <button onclick="fb('${r.query_id}','no')">👎 没帮助</button></div>
+        <div class="row" id="fbin-${r.query_id}" style="display:none">
+        <input id="cause-${r.query_id}" placeholder="请确认实际原因（沉淀为案例，必填）">
+        <button onclick="fbConfirm('${r.query_id}')">提交反馈</button></div></div>`;
+  h += '</div>';
+  $('result').innerHTML = h;
+}
+
+function fb(qid, val) {
+  if (val === 'yes') { $('fbin-' + qid).style.display = 'flex'; $('cause-' + qid).focus(); }
+  else fbConfirm(qid, true);
+}
+
+async function fbConfirm(qid, isNo) {
+  const cause = isNo ? '' : $('cause-' + qid).value.trim();
+  if (!isNo && !cause) return toast('请填写实际原因，以便沉淀案例', true);
+  const r = await fetch('/api/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query_id: qid, helpful: isNo ? 'no' : 'yes', confirmed_cause: cause, note: '' }) }).then(x => x.json());
+  toast(r.message || '已提交');
+  if (r.caseId) $('fbin-' + qid).innerHTML = `<div class="src">✅ ${r.message}</div>`;
+}
+
+/* ---------- 案例库 ---------- */
+async function loadDict() {
+  const d = await fetch('/api/dict').then(r => r.json());
+  $('codeList').innerHTML = d.errorCodes.map(c => `<option value="${c.code}">${c.code}：${c.meaning}</option>`).join('');
+  $('jobList').innerHTML = d.jobs.map(j => `<option value="${j.name}">${j.name}（${j.desc}）</option>`).join('');
+  $('tableList').innerHTML = d.tables.map(t => `<option value="${t.name}">${t.name}：${t.comment}</option>`).join('');
+}
+
+async function loadCases() {
+  const rows = await fetch('/api/cases').then(r => r.json());
+  $('caseCount').textContent = rows.length;
+  if (!rows.length) { $('caseList').innerHTML = '<div class="empty">暂无案例，快录入第一条吧</div>'; return; }
+  $('caseList').innerHTML = rows.map(c => `
+    <div class="case-card">
+      <div class="head"><div class="title">${esc(c.symptom.slice(0, 60))}${c.symptom.length > 60 ? '…' : ''}</div>
+        <div class="meta">${esc(c.case_id)} · ${esc(c.source)} · ${(c.created_at || '').slice(0, 16).replace('T', ' ')}</div></div>
+      <div class="body"><b>现象：</b>${esc(c.symptom)}<br><b>根因：</b>${esc(c.root_cause)}<br><b>解决：</b>${esc(c.solution)}</div>
+      <div class="tags">${c.error_code ? `<span class="tagm">${esc(c.error_code)}</span>` : ''}${c.related_jobs.map(j => `<span class="tagm">⚙ ${esc(j)}</span>`).join('')}${c.related_tables.map(t => `<span class="tagm">▤ ${esc(t)}</span>`).join('')}</div>
+    </div>`).join('');
+}
+
+async function submitCase() {
+  const errBox = $('c_err'); errBox.style.display = 'none';
+  const body = {
+    title: $('c_title').value.trim(), symptom: $('c_symptom').value.trim(),
+    root_cause: $('c_root').value.trim(), solution: $('c_solution').value.trim(),
+    error_code: $('c_code').value.trim(), related_jobs: $('c_jobs').value.trim(), related_tables: $('c_tables').value.trim(),
+  };
+  const miss = ['title', 'symptom', 'root_cause', 'solution'].filter(k => !body[k]);
+  if (miss.length) { errBox.textContent = '请填写：' + ({ title: '案例标题', symptom: '问题现象', root_cause: '根因分析', solution: '解决方式' }[miss[0]]); errBox.style.display = 'block'; return; }
+  $('c_btn').disabled = true;
+  try {
+    const r = await fetch('/api/cases', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(x => x.json());
+    if (r.error) { errBox.textContent = r.error; errBox.style.display = 'block'; }
+    else {
+      const a = r.auto_detected || {};
+      $('c_auto').innerHTML = `✅ 已录入案例 <b>${r.caseId}</b>，立即参与智能排查匹配` +
+        (a.jobs.length || a.tables.length || a.error_code ? `<br>系统自动识别：${[...a.jobs.map(j => '作业 ' + j), ...a.tables.map(t => '表 ' + t), ...(a.error_code ? ['错误码 ' + a.error_code] : [])].join('、') || '（文本中未识别到额外关联对象）'}` : '');
+      $('c_auto').style.display = 'block';
+      resetCaseForm(false);
+      loadCases();
+      toast('案例 ' + r.caseId + ' 已录入知识库');
+      setTimeout(() => { $('c_auto').style.display = 'none'; }, 8000);
+    }
+  } catch (e) { errBox.textContent = '提交失败：' + e.message; errBox.style.display = 'block'; }
+  $('c_btn').disabled = false;
+}
+
+function resetCaseForm(clearNote = true) {
+  ['c_title', 'c_symptom', 'c_root', 'c_solution', 'c_code', 'c_jobs', 'c_tables'].forEach(id => $(id).value = '');
+  if (clearNote) $('c_auto').style.display = 'none';
+  $('c_err').style.display = 'none';
+}
+
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+</script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "jobs": [
+    { "job_name": "job_ods_txnl_load",     "job_desc": "交易明细文件加载（FTP→ODS）",   "proc_name": null,                        "layer": "ODS", "schedule": "每日 20:30" },
+    { "job_name": "job_ods_acct_bal_load", "job_desc": "账户余额文件加载（FTP→ODS）",   "proc_name": null,                        "layer": "ODS", "schedule": "每日 20:30" },
+    { "job_name": "job_ods_cust_info_load","job_desc": "客户信息文件加载（FTP→ODS）",   "proc_name": null,                        "layer": "ODS", "schedule": "每日 20:00" },
+    { "job_name": "job_dim_cust_sync",     "job_desc": "客户维表刷新",                 "proc_name": "proc_dim_cust_sync",        "layer": "DIM", "schedule": "每日 21:00" },
+    { "job_name": "job_dwd_txnl_clean",    "job_desc": "交易明细清洗入DWD",             "proc_name": "proc_dwd_txnl_clean",       "layer": "DWD", "schedule": "每日 22:00" },
+    { "job_name": "job_dws_asset_agg",     "job_desc": "客户资产日汇总",               "proc_name": "proc_dws_asset_agg",        "layer": "DWS", "schedule": "每日 23:30" },
+    { "job_name": "job_ads_rpt_gen",       "job_desc": "客户资产日报生成",             "proc_name": "proc_ads_rpt_gen",          "layer": "ADS", "schedule": "每日 05:00" }
+  ],
+  "deps": [
+    { "job_name": "job_dim_cust_sync",      "depends_on": "job_ods_cust_info_load" },
+    { "job_name": "job_dwd_txnl_clean",     "depends_on": "job_ods_txnl_load" },
+    { "job_name": "job_dwd_txnl_clean",     "depends_on": "job_dim_cust_sync" },
+    { "job_name": "job_dws_asset_agg",      "depends_on": "job_dwd_txnl_clean" },
+    { "job_name": "job_dws_asset_agg",      "depends_on": "job_ods_acct_bal_load" },
+    { "job_name": "job_ads_rpt_gen",        "depends_on": "job_dws_asset_agg" }
+  ]
+}

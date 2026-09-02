@@ -1,0 +1,19 @@
+{
+  "name": "ai-troubleshooter",
+  "version": "0.1.0",
+  "description": "AI问题排查助手原型：数据异常与批量作业失败场景（血缘+链路+案例+规则归因）",
+  "main": "index.js",
+  "scripts": {
+    "build": "node src/pipeline/build.js",
+    "start": "node src/server/app.js",
+    "gen:tests": "node gen_tests.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "express": "^5.2.1"
+  }
+}

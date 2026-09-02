@@ -1,0 +1,234 @@
+{
+  "error_codes": [
+    { "code": "ORA-01400", "meaning": "非空约束违反：向不允许为空的列插入了 NULL", "typical_cause": "上游源文件格式变更导致关键字段缺失，或上游作业部分成功产出脏数据" },
+    { "code": "ORA-12899", "meaning": "字段值超长", "typical_cause": "源系统文件格式/字段长度变更（如客户名称新增生僻字、证件类型扩展），未同步调整目标表结构" },
+    { "code": "ORA-14400", "meaning": "插入的分区键不在已建分区范围内", "typical_cause": "目标表当日/当月分区未创建，或数据日期字段异常" },
+    { "code": "ORA-00001", "meaning": "唯一约束违反", "typical_cause": "重复加载或源数据主键重复（上游重推文件），重跑前未清理当日分区" },
+    { "code": "ORA-00942", "meaning": "表或视图不存在", "typical_cause": "依赖表未按期产出、DDL 变更未同步，或环境配置错误" },
+    { "code": "ORA-00060", "meaning": "死锁检测：多个会话互相等待对方持有的锁", "typical_cause": "跑批作业与手工补数/其他批量任务并发更新同一张表，需错峰调度或统一加锁顺序" },
+    { "code": "ORA-00054", "meaning": "资源正忙：对象被其他会话锁定", "typical_cause": "目标表被长事务或手工会话占用，DDL/加载无法获取锁" },
+    { "code": "ORA-01555", "meaning": "快照过旧：回滚段被覆盖", "typical_cause": "大批量更新与长查询并发、回滚段/UNDO 表空间不足，需错峰或加大 UNDO" },
+    { "code": "ORA-01653", "meaning": "表空间不足：无法扩展表", "typical_cause": "数据量增长后表空间未扩容，或历史分区未清理" },
+    { "code": "ORA-04030", "meaning": "进程内存耗尽", "typical_cause": "大批量排序/哈希操作内存不足，或主机内存资源被其他任务挤占" },
+    { "code": "SKIPPED",   "meaning": "调度跳过：上游依赖未就绪", "typical_cause": "上游作业失败或延迟，需先处理上游再重跑" },
+    { "code": "FTP-TIMEOUT", "meaning": "源文件等待超时未到达", "typical_cause": "源系统日切延迟、停机窗口顺延或传输链路故障，需联系源系统确认后启用延迟重试" },
+    { "code": "ENCODING-MISMATCH", "meaning": "文件编码不符（如 GBK/UTF-8 变更）", "typical_cause": "源系统导出程序或参数变更，加载后字段错位、乱码，需增加转码或与源系统对齐编码" },
+    { "code": "CODE-MISSING", "meaning": "码值映射缺失：上游新增枚举值未同步", "typical_cause": "源系统新增业务类型/产品码后，本地码表未同步更新，清洗作业按规则丢弃或报错" },
+    { "code": "ROWS_DROP", "meaning": "数据量骤降（较前日下降超过阈值）", "typical_cause": "上游文件不完整/部分成功，或上游作业失败后未重跑直接发布" },
+    { "code": "RECON-DIFF", "meaning": "对账不平：总账与明细汇总差异超阈值", "typical_cause": "当日冲正/挂账/在途交易处理逻辑差异，或部分文件未加载导致汇总口径不一致" },
+    { "code": "NEG-AMT", "meaning": "金额异常（为负或超阈值大额）", "typical_cause": "冲正/退货交易未按规则转正，或源数据异常需核实业务背景" },
+    { "code": "DUP-DATA", "meaning": "数据重复：同一业务主键出现多笔", "typical_cause": "源系统重推/断点重传导致重复记录，加载环节未按业务主键去重" }
+  ],
+  "tickets": [
+    {
+      "ticket_id": "TKT-2026-0158",
+      "title": "job_dwd_txnl_clean 失败 ORA-01400 CUST_ID 为空",
+      "symptom": "2026-06-14 晚 job_dwd_txnl_clean 失败，日志报 ORA-01400 cannot insert NULL into CUST_ID，当日 dwd_txnl_detail_d 分区未生成，下游汇总与日报全部跳过。",
+      "root_cause": "源系统 6 月中旬改造后交易文件末尾追加字段顺序调整，尾批记录错位导致 CUST_ID 解析为空；ods_txnl_load 加载时仅告警未拦截。",
+      "solution": "1. 联系源系统确认文件格式变更并发送修复版文件；2. 重新执行 job_ods_txnl_load 覆盖当日 ODS 分区；3. 校验 ods_txnl_detail 中 CUST_ID 相关字段无空值后，重跑 job_dwd_txnl_clean；4. 逐级重跑下游 job_dws_asset_agg、job_ads_rpt_gen。",
+      "related_jobs": ["job_dwd_txnl_clean", "job_ods_txnl_load"],
+      "related_tables": ["dwd_txnl_detail_d", "ods_txnl_detail"],
+      "error_code": "ORA-01400"
+    },
+    {
+      "ticket_id": "TKT-2025-0930",
+      "title": "dws_cust_asset_d 当日数据量骤降约 60%",
+      "symptom": "经营分析同事反馈 dws_cust_asset_d 2025-11-20 分区数据量较前日下降 60% 以上，资产规模报表数字明显偏低。",
+      "root_cause": "前一日 job_dwd_txnl_clean 曾失败，运维重跑该作业后未逐级重跑下游 job_dws_asset_agg，导致 DWS 汇总基于旧分区数据生成，交易明细缺失。",
+      "solution": "1. 核对 dwd_txnl_detail_d 与 dws_cust_asset_d 当日分区数据量；2. 确认上游作业状态后按血缘顺序重跑 job_dws_asset_agg；3. 建立重跑清单：失败作业恢复后必须按 DAG 逐级重跑下游。",
+      "related_jobs": ["job_dws_asset_agg", "job_dwd_txnl_clean"],
+      "related_tables": ["dws_cust_asset_d", "dwd_txnl_detail_d"],
+      "error_code": "ROWS_DROP"
+    },
+    {
+      "ticket_id": "TKT-2025-0412",
+      "title": "job_ads_rpt_gen 调度状态 SKIPPED 未产出日报",
+      "symptom": "job_ads_rpt_gen 连续两日 SKIPPED，ads_cust_asset_rpt 无当日分区，业务侧取数报 ORA-01403 无数据。",
+      "root_cause": "其上游 job_dws_asset_agg 因 job_dwd_txnl_clean 失败被连带跳过，运维只重跑了根因作业，未逐级恢复下游。",
+      "solution": "1. 在调度平台查看作业链路定位根因作业；2. 修复根因后按 DAG 自上而下逐级重跑；3. 恢复后校验 ads_cust_asset_rpt 当日分区行数。",
+      "related_jobs": ["job_ads_rpt_gen", "job_dws_asset_agg"],
+      "related_tables": ["ads_cust_asset_rpt", "dws_cust_asset_d"],
+      "error_code": "SKIPPED"
+    },
+    {
+      "ticket_id": "TKT-2026-0021",
+      "title": "dwd 交易明细大量客户号关联不上",
+      "symptom": "dwd_txnl_detail_d 中 CUST_ID 为空的记录数突增，客户维度汇总数据偏少，作业本身未报错。",
+      "root_cause": "job_dim_cust_sync 失败两日未被发现，dim_cust 停留在旧数据，新开户客户在维表中不存在导致关联不上。",
+      "solution": "1. 检查 job_dim_cust_sync 运行状态与 ods_cust_info 当日分区；2. 恢复维表刷新后重跑清洗作业；3. 对维表刷新增加失败告警。",
+      "related_jobs": ["job_dim_cust_sync", "job_dwd_txnl_clean"],
+      "related_tables": ["dim_cust", "dwd_txnl_detail_d", "ods_cust_info"],
+      "error_code": ""
+    },
+    {
+      "ticket_id": "TKT-2025-1108",
+      "title": "job_ods_acct_bal_load 文件延迟未加载",
+      "symptom": "20:30 调度触发时源系统余额文件未到达，作业等待超时失败，下游汇总余额字段为空。",
+      "root_cause": "源系统批量窗口顺延，余额文件 22:10 才生成，作业未启用文件到达重试策略。",
+      "solution": "1. 联系源系统确认文件实际到达时间；2. 文件到达后重跑 job_ods_acct_bal_load 及下游；3. 建议调度配置文件到达监听与延迟重试。",
+      "related_jobs": ["job_ods_acct_bal_load", "job_dws_asset_agg"],
+      "related_tables": ["ods_acct_bal", "dws_cust_asset_d"],
+      "error_code": "FTP-TIMEOUT"
+    },
+    {
+      "ticket_id": "TKT-2025-0719",
+      "title": "dwd_txnl_clean 报 ORA-14400 分区不存在",
+      "symptom": "月末 job_dwd_txnl_clean 失败，日志报 ORA-14400 插入的分区键不在已建分区范围。",
+      "root_cause": "目标表按月预建分区，当月分区创建作业 job_partition_create 失败未重跑，导致月底数据无法落表。",
+      "solution": "1. 手工创建当月分区；2. 重跑作业；3. 将分区创建作业纳入依赖链并增加失败告警。",
+      "related_jobs": ["job_dwd_txnl_clean"],
+      "related_tables": ["dwd_txnl_detail_d"],
+      "error_code": "ORA-14400"
+    },
+    {
+      "ticket_id": "TKT-2026-0056",
+      "title": "job_dwd_txnl_clean 重跑报 ORA-00001 唯一约束冲突",
+      "symptom": "白天手工重跑 job_dwd_txnl_clean 时报 ORA-00001 唯一约束冲突。",
+      "root_cause": "存储过程先删后插逻辑正常，但手工重跑时误指定了错误的数据日期参数，与历史分区数据冲突；属操作失误。",
+      "solution": "1. 确认重跑参数与目标分区日期一致；2. 重跑失败作业前先检查目标分区是否已有数据；3. 手工重跑统一走运维平台，避免直连执行。",
+      "related_jobs": ["job_dwd_txnl_clean"],
+      "related_tables": ["dwd_txnl_detail_d"],
+      "error_code": "ORA-00001"
+    },
+    {
+      "ticket_id": "TKT-2025-0210",
+      "title": "交易文件重复发送导致主键冲突",
+      "symptom": "job_ods_txnl_load 成功但行数翻倍，下游清洗报 ORA-00001。",
+      "root_cause": "源系统当日重发文件且包含前日数据，加载作业未做去重与日期过滤。",
+      "solution": "1. 清理当日 ODS 分区后重新加载修复版文件；2. 加载程序按文件日期过滤重复记录；3. 增加行数环比告警。",
+      "related_jobs": ["job_ods_txnl_load", "job_dwd_txnl_clean"],
+      "related_tables": ["ods_txnl_detail", "dwd_txnl_detail_d"],
+      "error_code": "ORA-00001"
+    },
+    {
+      "ticket_id": "TKT-2026-0071",
+      "title": "job_dws_asset_agg 失败 ORA-00060 死锁",
+      "symptom": "job_dws_asset_agg 在汇总阶段报 ORA-00060 deadlock detected，日志显示等待 DIM_CUST 表锁，当日资产汇总未产出，日报连锁跳过。",
+      "root_cause": "当日财务部门手工补数作业在 23:35 直连更新 dim_cust 归属机构字段，与汇总作业并发更新同一批客户记录形成死锁；两者无错峰机制。",
+      "solution": "1. 确认手工补数会话已结束，重跑 job_dws_asset_agg；2. 将手工补数窗口调整至批量完成后（01:00 后）；3. 统一表更新顺序（按 org_no→cust_id）避免交叉加锁；4. 手工补数统一走运维平台登记，避免与跑批窗口冲突。",
+      "related_jobs": ["job_dws_asset_agg"],
+      "related_tables": ["dws_cust_asset_d", "dim_cust"],
+      "error_code": "ORA-00060"
+    },
+    {
+      "ticket_id": "TKT-2025-0815",
+      "title": "dwd_txnl_detail_d 插入失败 ORA-01653 表空间不足",
+      "symptom": "月末 job_dwd_txnl_clean 失败，日志报 ORA-01653 unable to extend table DWD_TXNL_DETAIL_D。",
+      "root_cause": "交易量随业务增长，月末双倍数据量下 DWD 表空间耗尽；历史分区清理作业因故停跑两个月未被发现。",
+      "solution": "1. 紧急为 DWD 表空间增加数据文件；2. 重跑失败作业；3. 恢复历史分区定期归档清理作业；4. 对表空间使用率增加 85% 预警。",
+      "related_jobs": ["job_dwd_txnl_clean"],
+      "related_tables": ["dwd_txnl_detail_d"],
+      "error_code": "ORA-01653"
+    },
+    {
+      "ticket_id": "TKT-2025-1204",
+      "title": "汇总作业报 ORA-01555 快照过旧",
+      "symptom": "job_dws_asset_agg 运行 40 分钟后报 ORA-01555 snapshot too old 失败，此前两周偶发。",
+      "root_cause": "同窗口新上的数据质量稽核作业对 dwd_txnl_detail_d 发起全表长查询，与汇总作业大批量 DELETE/INSERT 并发，UNDO 空间不足以维持一致性读。",
+      "solution": "1. 将稽核作业调整至批量窗口结束后执行；2. UNDO 表空间由 8G 扩至 20G；3. 汇总作业 DELETE 改为按分区 TRUNCATE+EXCHANGE 降低 UNDO 占用。",
+      "related_jobs": ["job_dws_asset_agg", "job_dwd_txnl_clean"],
+      "related_tables": ["dws_cust_asset_d", "dwd_txnl_detail_d"],
+      "error_code": "ORA-01555"
+    },
+    {
+      "ticket_id": "TKT-2026-0033",
+      "title": "客户信息加载报 ORA-12899 字段超长",
+      "symptom": "job_ods_cust_info_load 失败，日志报 ORA-12899 value too large for column CUST_NAME，集中在少数记录。",
+      "root_cause": "源系统客户名称新增少数民族长姓名及外文姓名，超过 CUST_NAME VARCHAR(64) 定义；按字节编码后实际长度超出列宽。",
+      "solution": "1. 将 CUST_NAME 扩至 VARCHAR(128)；2. 与源系统确认姓名字段最大长度规范；3. 补录被拒绝的记录后重跑当日加载。",
+      "related_jobs": ["job_ods_cust_info_load", "job_dim_cust_sync"],
+      "related_tables": ["ods_cust_info", "dim_cust"],
+      "error_code": "ORA-12899"
+    },
+    {
+      "ticket_id": "TKT-2026-0044",
+      "title": "交易文件编码变更导致记录错位乱码",
+      "symptom": "job_ods_txnl_load 加载成功但行数与源系统对不上，dwd 清洗报大量字段格式错误，抽样发现中文乱码、字段错位。",
+      "root_cause": "源系统导出程序由 GBK 切换为 UTF-8 但未通知下游，加载程序仍按 GBK 解析，变长中文字段解析错位。",
+      "solution": "1. 加载程序增加编码自适应探测（BOM/字符集抽样校验）；2. 当日文件按 UTF-8 转码后重新加载；3. 与源系统约定编码变更需提前报备。",
+      "related_jobs": ["job_ods_txnl_load", "job_dwd_txnl_clean"],
+      "related_tables": ["ods_txnl_detail", "dwd_txnl_detail_d"],
+      "error_code": "ENCODING-MISMATCH"
+    },
+    {
+      "ticket_id": "TKT-2025-1338",
+      "title": "新增交易类型码值未同步导致明细大量丢失",
+      "symptom": "dwd_txnl_detail_d 当日行数较前日下降 25%，但上游 ODS 行数正常，作业无报错；报表交易规模偏低。",
+      "root_cause": "源系统新增交易类型 04（贵金属），清洗作业码表未同步，按白名单过滤时该类交易被整批丢弃。",
+      "solution": "1. 码表补充 04 映射后重跑清洗；2. 清洗规则改为未知码值落异常表并告警而非静默丢弃；3. 建立源系统码值变更通知机制。",
+      "related_jobs": ["job_dwd_txnl_clean", "job_ods_txnl_load"],
+      "related_tables": ["dwd_txnl_detail_d", "ods_txnl_detail"],
+      "error_code": "CODE-MISSING"
+    },
+    {
+      "ticket_id": "TKT-2025-1452",
+      "title": "外币交易折算金额异常偏大",
+      "symptom": "dws_cust_asset_d 中部分外币账户 bal_amt_sum 折算后异常偏大百倍，客户资产报表集中投诉。",
+      "root_cause": "汇率维表当日未更新（源汇率文件加载作业失败未重跑），折算逻辑回退使用默认汇率 1:1，美元/港币账户金额未折算。",
+      "solution": "1. 恢复汇率文件加载并重跑折算作业；2. 折算逻辑增加汇率缺失告警而非回退默认值；3. 增加折算金额合理性校验（波动超阈值拦截发布）。",
+      "related_jobs": ["job_dws_asset_agg"],
+      "related_tables": ["dws_cust_asset_d"],
+      "error_code": ""
+    },
+    {
+      "ticket_id": "TKT-2025-1501",
+      "title": "客户资产日报与总账对账不平",
+      "symptom": "ads_cust_asset_rpt 汇总资产规模与总账系统差额约 2.3%，超出对账容忍阈值，日报暂停发布。",
+      "root_cause": "当日 23:58 后源系统补推的隔夜冲正交易未包含在已加载文件中，明细汇总口径与总账日切口径存在在途差异。",
+      "solution": "1. 与总账确认日切时点，补推冲正明细文件；2. 重跑 dwd→dws→ads 链路；3. 发布前增加总分对账自动校验环节，不平自动暂缓发布。",
+      "related_jobs": ["job_ads_rpt_gen", "job_dws_asset_agg"],
+      "related_tables": ["ads_cust_asset_rpt", "dws_cust_asset_d"],
+      "error_code": "RECON-DIFF"
+    },
+    {
+      "ticket_id": "TKT-2026-0088",
+      "title": "同一笔交易在明细表出现两笔",
+      "symptom": "dwd_txnl_detail_d 中同一 txnl_id 存在两条记录，客户交易笔数翻倍投诉。",
+      "root_cause": "源系统断点重传导致当日文件尾部与前段重叠 5000 笔，加载按文件全量入库未按业务主键去重。",
+      "solution": "1. 清理当日分区后按 txnl_id 去重重新加载；2. 加载程序增加 ROW_NUMBER 按业务主键去重；3. 增加 PK 重复率入库前校验。",
+      "related_jobs": ["job_ods_txnl_load", "job_dwd_txnl_clean"],
+      "related_tables": ["ods_txnl_detail", "dwd_txnl_detail_d"],
+      "error_code": "DUP-DATA"
+    },
+    {
+      "ticket_id": "TKT-2025-1622",
+      "title": "大表汇总跑批时长劣化超时失败",
+      "symptom": "job_dws_asset_agg 运行时长由 10 分钟逐步劣化至 90 分钟，最终触发调度超时被杀，无数据库报错。",
+      "root_cause": "dwd_txnl_detail_d 数据量持续增长后表统计信息过期，优化器选错执行计划，JOIN 走了低效路径；近期无统计信息收集记录。",
+      "solution": "1. 手工收集表与索引统计信息后重跑恢复至 12 分钟；2. 批量窗口前自动收集增量统计信息；3. 对长跑作业增加时长环比告警。",
+      "related_jobs": ["job_dws_asset_agg", "job_dwd_txnl_clean"],
+      "related_tables": ["dws_cust_asset_d", "dwd_txnl_detail_d"],
+      "error_code": ""
+    },
+    {
+      "ticket_id": "TKT-2026-0091",
+      "title": "交易明细出现负金额记录",
+      "symptom": "dwd_txnl_detail_d 中 txnl_amt 为负的记录 3000 余笔，数据质量稽核告警，下游按正数统计的交易规模失真。",
+      "root_cause": "当日集中退货冲正交易，源文件中金额带负号，清洗作业未按冲正规则取绝对值并打业务标志，直接落表。",
+      "solution": "1. 与业务确认冲正口径后修正清洗逻辑（负金额转冲正标志）重跑；2. 稽核规则覆盖金额符号校验；3. 补充冲正交易对账。",
+      "related_jobs": ["job_dwd_txnl_clean"],
+      "related_tables": ["dwd_txnl_detail_d", "ods_txnl_detail"],
+      "error_code": "NEG-AMT"
+    },
+    {
+      "ticket_id": "TKT-2025-1733",
+      "title": "节假日后首日批量文件集中延迟",
+      "symptom": "元旦后首个工作日多个源文件集中延迟 1-3 小时到达，多个 ODS 加载作业等待超时失败，整链路顺延。",
+      "root_cause": "节假日源系统批量窗口整体顺延，而调度侧按工作日固定时间触发且未配置节假日日历与重试策略。",
+      "solution": "1. 文件到达后逐个重跑加载及下游链路；2. 调度平台配置节假日日历，触发时间自动顺延；3. 文件等待作业启用 30 分钟×3 次重试。",
+      "related_jobs": ["job_ods_txnl_load", "job_ods_acct_bal_load", "job_ods_cust_info_load"],
+      "related_tables": ["ods_txnl_detail", "ods_acct_bal", "ods_cust_info"],
+      "error_code": "FTP-TIMEOUT"
+    },
+    {
+      "ticket_id": "TKT-2026-0102",
+      "title": "新开分行数据未纳入资产日报",
+      "symptom": "某新设分行开业后连续两日在 ads_cust_asset_rpt 中无该机构数据，分行反馈看不到本行报表。",
+      "root_cause": "新机构 org_no 由源系统新增，dim_org 机构维表为季度维护，未及时补充，ads 加载 JOIN 维表时该机构记录被过滤。",
+      "solution": "1. dim_org 补录新机构信息并重跑日报；2. 机构维表改为按日增量同步；3. JOIN 维表前增加新机构存在性校验。",
+      "related_jobs": ["job_ads_rpt_gen"],
+      "related_tables": ["dim_org", "ads_cust_asset_rpt"],
+      "error_code": "CODE-MISSING"
+    }
+  ]
+}
