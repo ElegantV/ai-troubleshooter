@@ -31,7 +31,7 @@ function toMarkdown(r) {
   return L.join('\n');
 }
 
-async function troubleshoot(graph, text) {
+async function analyze(graph, text, user) {
   const db = graph.db;
   const ent = extract(graph, text);
   ent.date = ent.date || db.prepare('SELECT MAX(run_date) AS d FROM job_runs').get().d;
@@ -106,15 +106,15 @@ async function troubleshoot(graph, text) {
   // LLM 增强（原型默认关闭，规则+检索结果直接返回）
   await enhanceReport(report);
 
-  // 审计留痕
-  graph.db.prepare('INSERT INTO query_log (query_id, created_at, input_text, entities_json, report_json) VALUES (?,?,?,?,?)')
-    .run(report.query_id, report.created_at, text, JSON.stringify(ent), JSON.stringify(report));
+  // 审计留痕（记录操作人）
+  graph.db.prepare('INSERT INTO query_log (query_id, created_at, input_text, entities_json, report_json, user_name) VALUES (?,?,?,?,?,?)')
+    .run(report.query_id, report.created_at, text, JSON.stringify(ent), JSON.stringify(report), user || '');
 
   return report;
 }
 
-/** 反馈沉淀闭环：确认有效的排查结论自动写入案例库 */
-function saveFeedback(graph, { query_id, helpful, confirmed_cause, note }) {
+/** 反馈沉淀闭环：确认有效的排查结论自动写入案例库（归属到操作人） */
+function saveFeedback(graph, { query_id, helpful, confirmed_cause, note }, user) {
   const db = graph.db;
   const row = db.prepare('SELECT * FROM query_log WHERE query_id=?').get(query_id);
   if (!row) return { ok: false, message: '查询记录不存在' };
@@ -125,17 +125,17 @@ function saveFeedback(graph, { query_id, helpful, confirmed_cause, note }) {
     const ent = JSON.parse(row.entities_json);
     const report = JSON.parse(row.report_json);
     const caseId = 'CASE-' + Date.now();
-    db.prepare('INSERT INTO cases VALUES (?,?,?,?,?,?,?,?,?)').run(
+    db.prepare('INSERT INTO cases (case_id, symptom, root_cause, solution, related_jobs, related_tables, error_code, source, created_at, created_by) VALUES (?,?,?,?,?,?,?,?,?,?)').run(
       caseId,
       row.input_text,
       confirmed_cause,
       note || report.sections.find(s => s.key === 'solution')?.items?.join('；') || '',
       JSON.stringify(ent.jobs || []), JSON.stringify(ent.tables || []),
-      ent.errorCode || '', '用户反馈沉淀', new Date().toISOString(),
+      ent.errorCode || '', '用户反馈沉淀', new Date().toISOString(), user || row.user_name || '',
     );
     return { ok: true, caseId, message: `反馈已记录，并已沉淀为案例 ${caseId}，后续排查将自动关联` };
   }
   return { ok: true, message: '反馈已记录' };
 }
 
-module.exports = { troubleshoot, saveFeedback };
+module.exports = { analyze, saveFeedback };

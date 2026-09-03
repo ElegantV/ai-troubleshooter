@@ -17,8 +17,8 @@ CREATE TABLE IF NOT EXISTS batch_logs(run_date TEXT, ts TEXT, job_name TEXT, lev
 CREATE TABLE IF NOT EXISTS job_runs(run_date TEXT, job_name TEXT, final_status TEXT, rows_loaded INTEGER);
 CREATE TABLE IF NOT EXISTS error_codes(code TEXT PRIMARY KEY, meaning TEXT, typical_cause TEXT);
 CREATE TABLE IF NOT EXISTS tickets(ticket_id TEXT PRIMARY KEY, title TEXT, symptom TEXT, root_cause TEXT, solution TEXT, related_jobs TEXT, related_tables TEXT, error_code TEXT);
-CREATE TABLE IF NOT EXISTS cases(case_id TEXT PRIMARY KEY, symptom TEXT, root_cause TEXT, solution TEXT, related_jobs TEXT, related_tables TEXT, error_code TEXT, source TEXT, created_at TEXT);
-CREATE TABLE IF NOT EXISTS query_log(query_id TEXT PRIMARY KEY, created_at TEXT, input_text TEXT, entities_json TEXT, report_json TEXT, helpful TEXT, confirmed_cause TEXT, feedback_at TEXT);
+CREATE TABLE IF NOT EXISTS cases(case_id TEXT PRIMARY KEY, symptom TEXT, root_cause TEXT, solution TEXT, related_jobs TEXT, related_tables TEXT, error_code TEXT, source TEXT, created_at TEXT, created_by TEXT);
+CREATE TABLE IF NOT EXISTS query_log(query_id TEXT PRIMARY KEY, created_at TEXT, input_text TEXT, entities_json TEXT, report_json TEXT, helpful TEXT, confirmed_cause TEXT, feedback_at TEXT, user_name TEXT);
 `;
 
 /** 解析 DDL 文件：CREATE TABLE 块 → 元数据表/列 */
@@ -113,7 +113,11 @@ function collect(db) {
   // 3. 跑批日志（真实环境：日志平台检索）
   const insLog = db.prepare('INSERT INTO batch_logs VALUES (?,?,?,?,?,?,?)');
   const allLogs = [];
-  for (const f of fs.readdirSync(path.join(RAW_DIR, 'logs')).filter(f => f.endsWith('.log'))) {
+  const logsDir = path.join(RAW_DIR, 'logs');
+  if (!fs.existsSync(logsDir)) {
+    throw new Error(`缺少跑批日志目录 ${logsDir}：请确认 data/raw/logs/*.log 演示数据已就位（不应被 .gitignore 排除）`);
+  }
+  for (const f of fs.readdirSync(logsDir).filter(f => f.endsWith('.log'))) {
     const runDate = f.slice(0, 10).replace(/-/g, '');
     const lines = fs.readFileSync(path.join(RAW_DIR, 'logs', f), 'utf8').split('\n');
     lines.forEach((line, i) => {

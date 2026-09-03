@@ -43,13 +43,26 @@ function bm25(index, query, k1 = 1.5, b = 0.75) {
   return scores;
 }
 
-/** 在工单+已沉淀案例中检索，附带实体加权 */
-function searchCases(db, query, { errorCode = '', jobs = [], tables = [] } = {}, topN = 3) {
+/** 工单+案例 → 检索文档 */
+function loadDocs(db) {
   const tickets = db.prepare('SELECT * FROM tickets').all()
     .map(t => ({ kind: 'ticket', id: t.ticket_id, title: t.title, symptom: t.symptom, root_cause: t.root_cause, solution: t.solution, error_code: t.error_code, related_jobs: JSON.parse(t.related_jobs || '[]'), related_tables: JSON.parse(t.related_tables || '[]'), text: `${t.title} ${t.symptom} ${t.root_cause} ${t.error_code} ${(JSON.parse(t.related_jobs || '[]')).join(' ')} ${(JSON.parse(t.related_tables || '[]')).join(' ')}` }));
   const cases = db.prepare('SELECT * FROM cases').all()
     .map(c => ({ kind: 'case', id: c.case_id, title: c.symptom.slice(0, 40), symptom: c.symptom, root_cause: c.root_cause, solution: c.solution, error_code: c.error_code || '', related_jobs: JSON.parse(c.related_jobs || '[]'), related_tables: JSON.parse(c.related_tables || '[]'), text: `${c.symptom} ${c.root_cause} ${c.error_code || ''} ${(JSON.parse(c.related_jobs || '[]')).join(' ')} ${(JSON.parse(c.related_tables || '[]')).join(' ')}` }));
-  const index = buildIndex([...tickets, ...cases]);
+  return [...tickets, ...cases];
+}
+
+/** BM25 索引缓存：案例/工单数量变化时自动重建（录入新案例后立即参与匹配） */
+let _indexCache = null;
+function getIndex(db) {
+  const n = db.prepare('SELECT (SELECT COUNT(*) FROM tickets) + (SELECT COUNT(*) FROM cases) AS n').get().n;
+  if (!_indexCache || _indexCache.n !== n) _indexCache = { n, index: buildIndex(loadDocs(db)) };
+  return _indexCache.index;
+}
+
+/** 在工单+已沉淀案例中检索，附带实体加权 */
+function searchCases(db, query, { errorCode = '', jobs = [], tables = [] } = {}, topN = 3) {
+  const index = getIndex(db);
   const results = bm25(index, query)
     .filter(r => r.score > 0.5)
     .map(r => {

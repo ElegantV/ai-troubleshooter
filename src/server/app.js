@@ -3,12 +3,34 @@ const express = require('express');
 const path = require('path');
 const { PORT } = require('../config');
 const { loadGraph } = require('../agent/graphQuery');
-const { troubleshoot, saveFeedback } = require('../agent/workflow');
+const { analyze, saveFeedback } = require('../agent/workflow');
+const auth = require('../auth');
 
 const graph = loadGraph();
+auth.ensureAuthSchema(graph.db);
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', '..', 'public')));
+
+// ---- 认证 ----
+// POST 路由表：统一以动词动态挂载，便于集中维护与后续加限流/审计中间件
+const route = (verb, routePath, ...handlers) => app[verb](routePath, ...handlers);
+
+route('post', '/api/register', (req, res) => res.json(auth.register(graph.db, req.body || {})));
+route('post', '/api/login', (req, res) => res.json(auth.login(graph.db, req.body || {})));
+route('post', '/api/logout', (req, res) => {
+  auth.logout(graph.db, String(req.headers.authorization || '').replace(/^Bearer\s+/i, ''));
+  res.json({ ok: true });
+});
+app.get('/api/me', (req, res) => {
+  const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  const user = auth.resolveUser(graph.db, token);
+  if (!user) return res.status(401).json({ needLogin: true });
+  res.json(user);
+});
+
+// 以下所有接口需登录（操作归属：案例/审计记录落到人）
+app.use('/api', auth.requireAuth(graph.db));
 
 const n = (t) => graph.db.prepare(`SELECT COUNT(*) AS c FROM ${t}`).get().c;
 
@@ -84,25 +106,26 @@ app.get('/api/demos', (req, res) => {
   });
 });
 
-app.post('/api/troubleshoot', async (req, res) => {
+route('post', '/api/troubleshoot', async (req, res) => {
   const text = String(req.body?.text || '').trim();
   if (!text) return res.status(400).json({ error: '请输入异常表、字段、失败作业或现象描述' });
+  if (text.length > 5000) return res.status(400).json({ error: '输入过长（上限 5000 字符），请粘贴关键报错片段或补充说明' });
   try {
-    res.json(await troubleshoot(graph, text));
+    res.json(await analyze(graph, text, req.user.username));
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: '排查失败：' + e.message });
   }
 });
 
-app.post('/api/feedback', (req, res) => {
-  res.json(saveFeedback(graph, req.body || {}));
+route('post', '/api/feedback', (req, res) => {
+  res.json(saveFeedback(graph, req.body || {}, req.user.username));
 });
 
 const splitList = (s) => String(s || '').split(/[,，;；、\s]+/).map(x => x.trim()).filter(Boolean);
 
 /** 案例录入：用户把已解决的问题沉淀进知识库 */
-app.post('/api/cases', (req, res) => {
+route('post', '/api/cases', (req, res) => {
   const b = req.body || {};
   const title = String(b.title || '').trim();
   const symptom = String(b.symptom || '').trim();
@@ -127,10 +150,10 @@ app.post('/api/cases', (req, res) => {
   const errorCode = String(b.error_code || '').trim().toUpperCase() || autoCode;
 
   const caseId = 'CASE-' + Date.now();
-  db.prepare('INSERT INTO cases VALUES (?,?,?,?,?,?,?,?,?)').run(
+  db.prepare('INSERT INTO cases (case_id, symptom, root_cause, solution, related_jobs, related_tables, error_code, source, created_at, created_by) VALUES (?,?,?,?,?,?,?,?,?,?)').run(
     caseId, symptom, root_cause, solution,
     JSON.stringify(jobs), JSON.stringify(tables), errorCode,
-    '人工录入', new Date().toISOString(),
+    '人工录入', new Date().toISOString(), req.user.username,
   );
   res.json({ ok: true, caseId, auto_detected: { jobs: autoJobs, tables: autoTables, error_code: autoCode || null } });
 });
@@ -139,7 +162,7 @@ app.get('/api/cases', (req, res) => {
   const rows = graph.db.prepare('SELECT * FROM cases ORDER BY created_at DESC').all().map(c => ({
     case_id: c.case_id, symptom: c.symptom, root_cause: c.root_cause, solution: c.solution,
     related_jobs: JSON.parse(c.related_jobs || '[]'), related_tables: JSON.parse(c.related_tables || '[]'),
-    error_code: c.error_code || '', source: c.source, created_at: c.created_at,
+    error_code: c.error_code || '', source: c.source, created_at: c.created_at, created_by: c.created_by || '',
   }));
   res.json(rows);
 });

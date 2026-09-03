@@ -1,12 +1,28 @@
 /** 端到端测试脚本: node test_api.js */
 const BASE = 'http://localhost:3000';
-async function post(path, body) {
-  const r = await fetch(BASE + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+const USER = { username: 'tester_' + Date.now(), password: 'test123456', display_name: '端到端测试员' };
+let TOKEN = '';
+const authHeaders = () => ({ 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN });
+async function post(path, body, withAuth = true) {
+  const r = await fetch(BASE + path, { method: 'POST', headers: withAuth ? authHeaders() : { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   return r.json();
 }
-async function get(path) { return fetch(BASE + path).then(r => r.json()); }
+async function get(path) { return fetch(BASE + path, { headers: { Authorization: 'Bearer ' + TOKEN } }).then(r => r.json()); }
 
 async function main() {
+  // 认证：未登录应被拒；注册+登录后正常访问
+  const denied = await post('/api/troubleshoot', { text: 'job_dwd_txnl_clean 失败' }, false);
+  console.log('=== 未登录访问被拒 ===', JSON.stringify(denied));
+  const reg = await post('/api/register', USER, false);
+  console.log('=== 注册 ===', reg.ok ? `成功，token 已获取（用户 ${reg.user.username}/${reg.user.display_name}）` : JSON.stringify(reg));
+  if (reg.token) TOKEN = reg.token; else {
+    const lg = await post('/api/login', USER, false);
+    console.log('=== 登录 ===', JSON.stringify(lg).slice(0, 80));
+    TOKEN = lg.token;
+  }
+  const me = await get('/api/me');
+  console.log('=== 当前用户 ===', JSON.stringify(me));
+
   const meta = await get('/api/meta');
   console.log('=== 知识库规模 ===');
   console.log(`工单 ${meta.tickets} 条 | 案例 ${meta.cases} 条 | 血缘边 ${meta.lineageEdges} 条 | 最新跑批日 ${meta.latestRunDate}`);
@@ -62,6 +78,6 @@ async function main() {
   console.log('=== 必填校验 ===', JSON.stringify(bad));
 
   const cases = await get('/api/cases');
-  console.log('\n案例库:', cases.map(c => c.case_id + '(' + c.source + ')').join(', '));
+  console.log('\n案例库:', cases.map(c => c.case_id + '(' + c.source + (c.created_by ? ' by ' + c.created_by : '') + ')').join(', '));
 }
 main().catch(e => { console.error(e); process.exit(1); });

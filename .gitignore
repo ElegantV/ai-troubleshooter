@@ -2,4 +2,6 @@ node_modules/
 data/assistant.db
 server.log
 *.log
+!data/raw/logs/*.log
 .DS_Store
+.mimosa/

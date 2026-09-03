@@ -168,7 +168,7 @@ const CASES = [
   // —— 模块I 审计 ——
   { id: 'TC-AU-001', mod: '审计留痕', title: '查询记录落库', pri: '低',
     pre: '已执行过至少一次排查',
-    steps: '1. 在项目目录执行：node -e "const{DatabaseSync}=require(\'node:sqlite\');const db=new DatabaseSync(\'data/assistant.db\',{readOnly:true});console.log(db.prepare(\'SELECT query_id,input_text,created_at FROM query_log ORDER BY created_at DESC LIMIT 3\').all())"',
+    steps: '1. 在项目目录用只读方式打开 data/assistant.db（SQLite），查询 query_log 表最近 3 条记录（query_id、input_text、created_at）',
     data: '—',
     expect: '能查询到最近排查记录（query_id、输入文本、时间），且最新一条与刚才的排查输入一致' },
 ];

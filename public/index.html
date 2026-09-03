@@ -83,15 +83,47 @@
   table.st th { text-align: left; background: #f1f5f9; color: #334155; padding: 4px 8px; border: 1px solid #e2e8f0; font-weight: 600; }
   table.st td { padding: 3px 8px; border: 1px solid #e2e8f0; color: #475569; }
   table.st td:first-child { font-family: Consolas, monospace; color: #0f172a; }
+  /* 登录 */
+  .login-mask { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: flex; align-items: center; justify-content: center; z-index: 99; }
+  .login-box { background: #fff; border-radius: 14px; padding: 28px 30px; width: 360px; max-width: 92vw; box-shadow: 0 20px 50px rgba(0,0,0,.25); }
+  .login-box h2 { font-size: 18px; color: #1e3a8a; margin-bottom: 4px; }
+  .login-box .sub { font-size: 12.5px; color: #6b7280; margin-bottom: 14px; }
+  .login-box .field { margin-bottom: 10px; }
+  .login-box .field input { width: 100%; border: 1px solid #d1d5db; border-radius: 8px; padding: 9px 10px; font-size: 13.5px; font-family: inherit; }
+  .login-box .err { color: #b91c1c; font-size: 12.5px; min-height: 18px; margin: 4px 0 6px; }
+  .login-box .switch { font-size: 12.5px; color: #6b7280; text-align: center; margin-top: 8px; }
+  .login-box .switch a { color: #2563eb; cursor: pointer; }
+  .who { margin-left: auto; font-size: 12.5px; color: #6b7280; display: flex; align-items: center; gap: 8px; }
+  .who a { color: #2563eb; cursor: pointer; }
+  header .head-row { display: flex; align-items: flex-start; gap: 12px; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <h1>🔍 AI 问题排查助手 <span style="font-size:13px;color:#9ca3af;font-weight:normal">原型 v0.2</span></h1>
-    <div class="sub">面向数据异常与批量作业失败场景 · 血缘/链路/案例关联分析 · 规则归因（LLM 接口已预留）</div>
+    <div class="head-row">
+      <div style="flex:1">
+        <h1>🔍 AI 问题排查助手 <span style="font-size:13px;color:#9ca3af;font-weight:normal">原型 v0.2</span></h1>
+        <div class="sub">面向数据异常与批量作业失败场景 · 血缘/链路/案例关联分析 · 规则归因（LLM 接口已预留）</div>
+      </div>
+      <div class="who hidden" id="who">👤 <b id="whoName"></b> · <a onclick="logout()">退出</a></div>
+    </div>
     <div class="chips" id="chips">知识库加载中…</div>
   </header>
+
+  <!-- 登录遮罩 -->
+  <div class="login-mask" id="loginMask" style="display:none">
+    <div class="login-box">
+      <h2 id="loginTitle">登录</h2>
+      <div class="sub">登录后您的排查、案例录入与反馈将记录归属，沉淀为团队资产</div>
+      <div class="field"><input id="l_user" placeholder="用户名（小写字母/数字/下划线）" autocomplete="username"></div>
+      <div class="field"><input id="l_pass" type="password" placeholder="密码（至少 6 位）" autocomplete="current-password"></div>
+      <div class="field hidden" id="l_dispRow"><input id="l_disp" placeholder="姓名（可选，用于案例展示）"></div>
+      <div class="err" id="l_err"></div>
+      <button class="primary" style="width:100%" id="l_btn" onclick="doLogin()">登录</button>
+      <div class="switch" id="l_switch">没有账号？<a onclick="toggleLoginMode()">注册一个</a></div>
+    </div>
+  </div>
 
   <div class="nav">
     <a id="tab-trouble" class="on" onclick="switchTab('trouble')">智能排查</a>
@@ -178,6 +210,73 @@
 
 <script>
 const $ = id => document.getElementById(id);
+
+/* ---------- 认证 ---------- */
+const TOKEN_KEY = 'ats_token';
+const getToken = () => localStorage.getItem(TOKEN_KEY) || '';
+const setToken = t => t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY);
+
+/** 统一请求封装：自动带 token，401 弹出登录 */
+async function api(path, opts = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(getToken() ? { Authorization: 'Bearer ' + getToken() } : {}) };
+  const r = await fetch(path, { ...opts, headers });
+  if (r.status === 401) {
+    const j = await r.json().catch(() => ({}));
+    setToken('');
+    showLogin(j.error || '请先登录');
+    throw new Error('未登录');
+  }
+  return r.json();
+}
+
+let loginMode = 'login';
+function showLogin(msg) {
+  $('loginMask').style.display = 'flex';
+  if (msg) $('l_err').textContent = msg;
+}
+function hideLogin() { $('loginMask').style.display = 'none'; $('l_err').textContent = ''; }
+function toggleLoginMode() {
+  loginMode = loginMode === 'login' ? 'register' : 'login';
+  $('loginTitle').textContent = loginMode === 'login' ? '登录' : '注册';
+  $('l_btn').textContent = loginMode === 'login' ? '登录' : '注册';
+  $('l_switch').innerHTML = loginMode === 'login' ? '没有账号？<a onclick="toggleLoginMode()">注册一个</a>' : '已有账号？<a onclick="toggleLoginMode()">去登录</a>';
+  $('l_dispRow').classList.toggle('hidden', loginMode === 'login');
+  $('l_err').textContent = '';
+}
+async function doLogin() {
+  const btn = $('l_btn'); btn.disabled = true;
+  try {
+    const body = { username: $('l_user').value.trim(), password: $('l_pass').value };
+    if (loginMode === 'register') body.display_name = $('l_disp').value.trim();
+    const r = await fetch('/api/' + loginMode, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(x => x.json());
+    if (!r.ok && !r.token) { $('l_err').textContent = r.message || r.error || '操作失败'; return; }
+    setToken(r.token);
+    $('whoName').textContent = (r.user && r.user.display_name) || body.username;
+    $('who').classList.remove('hidden');
+    hideLogin();
+    loadMeta();
+    toast(loginMode === 'register' ? '注册成功，已自动登录' : '登录成功');
+  } catch (e) { $('l_err').textContent = '网络错误：' + e.message; }
+  btn.disabled = false;
+}
+async function logout() {
+  try { await fetch('/api/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + getToken() } }); } catch (e) {}
+  setToken('');
+  $('who').classList.add('hidden');
+  showLogin('已退出登录');
+}
+async function initAuth() {
+  if (!getToken()) { showLogin(); return; }
+  try {
+    const me = await fetch('/api/me', { headers: { Authorization: 'Bearer ' + getToken() } });
+    if (me.status === 401) { setToken(''); showLogin(); return; }
+    const u = await me.json();
+    $('whoName').textContent = u.display_name || u.username;
+    $('who').classList.remove('hidden');
+    loadMeta();
+  } catch (e) { showLogin(); }
+}
+initAuth();
 const SAMPLE_PROC = `INSERT INTO dwd_txnl_detail_d
     (txnl_id, cust_id, acct_no, txnl_type, txnl_amt, txnl_dt, data_dt)
 SELECT t.txnl_id, c.cust_id, t.acct_no, t.txnl_type, t.txnl_amt, t.txnl_dt, '20260903'
@@ -197,15 +296,16 @@ function switchTab(tab) {
   if (tab === 'graph') loadGraphView();
 }
 
-fetch('/api/meta').then(r => r.json()).then(m => {
+async function loadMeta() {
+  const m = await api('/api/meta');
   let html = `<span class="chip">表 ${m.tables} 张</span><span class="chip">作业 ${m.jobs} 个</span><span class="chip">血缘边 ${m.lineageEdges} 条</span><span class="chip">历史工单 ${m.tickets} 条</span><span class="chip">案例 ${m.cases} 条</span><span class="chip">最新跑批日 ${m.latestRunDate}</span>`;
   for (const j of m.abnormalJobs) html += `<span class="chip">⚠ ${j.job_name}: ${j.final_status}</span>`;
   $('chips').innerHTML = html;
-});
+}
 
 /* ---------- 能力图示 ---------- */
 async function loadGraphView() {
-  const [g, d] = await Promise.all([fetch('/api/graph').then(r => r.json()), fetch('/api/demos').then(r => r.json())]);
+  const [g, d] = await Promise.all([api('/api/graph'), api('/api/demos')]);
   $('demoCards').innerHTML = [d.lineageDemo, d.chainDemo, d.caseDemo].map(x => `
     <div class="case-card"><div class="head"><div class="title">${esc(x.title)}</div>
       <button style="border:1px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:8px;padding:4px 12px;font-size:12px;cursor:pointer" onclick="fill('${x.try}')">▶ 试一试</button></div>
@@ -266,7 +366,7 @@ async function go() {
   $('btn').disabled = true;
   $('result').innerHTML = '<div class="panel"><div class="empty">排查中…（实体识别 → 血缘/链路分析 → 案例检索 → 归因）</div></div>';
   try {
-    const r = await fetch('/api/troubleshoot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) }).then(r => r.json());
+    const r = await api('/api/troubleshoot', { method: 'POST', body: JSON.stringify({ text }) });
     if (r.error) { $('result').innerHTML = `<div class="panel"><div class="empty">${r.error}</div></div>`; return; }
     render(r);
   } catch (e) { $('result').innerHTML = `<div class="panel"><div class="empty">请求失败：${e.message}</div></div>`; }
@@ -328,28 +428,28 @@ function fb(qid, val) {
 async function fbConfirm(qid, isNo) {
   const cause = isNo ? '' : $('cause-' + qid).value.trim();
   if (!isNo && !cause) return toast('请填写实际原因，以便沉淀案例', true);
-  const r = await fetch('/api/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query_id: qid, helpful: isNo ? 'no' : 'yes', confirmed_cause: cause, note: '' }) }).then(x => x.json());
+  const r = await api('/api/feedback', { method: 'POST',
+    body: JSON.stringify({ query_id: qid, helpful: isNo ? 'no' : 'yes', confirmed_cause: cause, note: '' }) });
   toast(r.message || '已提交');
   if (r.caseId) $('fbin-' + qid).innerHTML = `<div class="src">✅ ${r.message}</div>`;
 }
 
 /* ---------- 案例库 ---------- */
 async function loadDict() {
-  const d = await fetch('/api/dict').then(r => r.json());
+  const d = await api('/api/dict');
   $('codeList').innerHTML = d.errorCodes.map(c => `<option value="${c.code}">${c.code}：${c.meaning}</option>`).join('');
   $('jobList').innerHTML = d.jobs.map(j => `<option value="${j.name}">${j.name}（${j.desc}）</option>`).join('');
   $('tableList').innerHTML = d.tables.map(t => `<option value="${t.name}">${t.name}：${t.comment}</option>`).join('');
 }
 
 async function loadCases() {
-  const rows = await fetch('/api/cases').then(r => r.json());
+  const rows = await api('/api/cases');
   $('caseCount').textContent = rows.length;
   if (!rows.length) { $('caseList').innerHTML = '<div class="empty">暂无案例，快录入第一条吧</div>'; return; }
   $('caseList').innerHTML = rows.map(c => `
     <div class="case-card">
       <div class="head"><div class="title">${esc(c.symptom.slice(0, 60))}${c.symptom.length > 60 ? '…' : ''}</div>
-        <div class="meta">${esc(c.case_id)} · ${esc(c.source)} · ${(c.created_at || '').slice(0, 16).replace('T', ' ')}</div></div>
+        <div class="meta">${esc(c.case_id)} · ${esc(c.source)}${c.created_by ? ' · ' + esc(c.created_by) : ''} · ${(c.created_at || '').slice(0, 16).replace('T', ' ')}</div></div>
       <div class="body"><b>现象：</b>${esc(c.symptom)}<br><b>根因：</b>${esc(c.root_cause)}<br><b>解决：</b>${esc(c.solution)}</div>
       <div class="tags">${c.error_code ? `<span class="tagm">${esc(c.error_code)}</span>` : ''}${c.related_jobs.map(j => `<span class="tagm">⚙ ${esc(j)}</span>`).join('')}${c.related_tables.map(t => `<span class="tagm">▤ ${esc(t)}</span>`).join('')}</div>
     </div>`).join('');
@@ -366,7 +466,7 @@ async function submitCase() {
   if (miss.length) { errBox.textContent = '请填写：' + ({ title: '案例标题', symptom: '问题现象', root_cause: '根因分析', solution: '解决方式' }[miss[0]]); errBox.style.display = 'block'; return; }
   $('c_btn').disabled = true;
   try {
-    const r = await fetch('/api/cases', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(x => x.json());
+    const r = await api('/api/cases', { method: 'POST', body: JSON.stringify(body) });
     if (r.error) { errBox.textContent = r.error; errBox.style.display = 'block'; }
     else {
       const a = r.auto_detected || {};

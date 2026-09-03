@@ -1,0 +1,9 @@
+[2026-08-20 20:00:05] INFO job_ods_cust_info_load 加载完成 SUCCESS rows_loaded=85110
+[2026-08-20 20:30:02] INFO job_ods_txnl_load 加载完成 SUCCESS rows_loaded=1241200
+[2026-08-20 20:41:00] INFO job_ods_acct_bal_load 加载完成 SUCCESS rows_loaded=319870
+[2026-08-20 21:02:00] INFO job_dim_cust_sync 维表同步完成 SUCCESS rows_loaded=85110
+[2026-08-20 22:10:00] INFO job_dwd_txnl_clean 清洗完成 SUCCESS rows_loaded=1183200
+[2026-08-20 23:32:18] WARN job_dws_asset_agg 检测到与手工补数会话并发更新 dws_cust_asset_d，存在锁等待
+[2026-08-20 23:40:55] ERROR job_dws_asset_agg 汇总更新失败 FAILED: ORA-00060 死锁检测，多个会话互相等待 ORA-00060
+[2026-08-20 23:41:00] INFO job_dws_asset_agg 作业终止，dws_cust_asset_d 当日分区未更新
+[2026-08-21 05:00:00] INFO job_ads_rpt_gen SKIPPED 上游 job_dws_asset_agg 失败，调度跳过

@@ -1,0 +1,11 @@
+[2026-06-14 20:00:05] INFO job_ods_cust_info_load 源文件 cust_info_20260614.dat 到达，开始加载 rows_loaded=85230
+[2026-06-14 20:41:10] INFO job_ods_cust_info_load 加载完成 SUCCESS rows_loaded=85230
+[2026-06-14 20:30:02] INFO job_ods_txnl_load 源文件 txnl_20260614.dat 到达，开始加载
+[2026-06-14 20:52:44] WARN job_ods_txnl_load 源文件尾批记录字段错位，CUST_ID 解析为空的比例异常升高，仅告警不拦截
+[2026-06-14 21:05:31] INFO job_ods_txnl_load 加载完成（部分记录字段错位） SUCCESS rows_loaded=1238450
+[2026-06-14 21:10:00] INFO job_ods_acct_bal_load 加载完成 SUCCESS rows_loaded=318240
+[2026-06-14 21:15:00] INFO job_dim_cust_sync 维表同步完成 SUCCESS rows_loaded=85230
+[2026-06-14 22:05:12] ERROR job_dwd_txnl_clean 清洗写入失败 FAILED: ORA-01400 cannot insert NULL into ("DWD"."DWD_TXNL_DETAIL_D"."CUST_ID") ORA-01400
+[2026-06-14 22:05:13] INFO job_dwd_txnl_clean 作业终止，当日分区未产出
+[2026-06-14 23:30:00] INFO job_dws_asset_agg SKIPPED 上游 job_dwd_txnl_clean 失败，调度跳过
+[2026-06-15 05:00:00] INFO job_ads_rpt_gen SKIPPED 上游 job_dws_asset_agg 未产出，调度跳过

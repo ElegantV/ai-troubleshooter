@@ -1,0 +1,7 @@
+[2026-09-01 20:00:05] INFO job_ods_cust_info_load 源文件到达，加载完成 SUCCESS rows_loaded=85301
+[2026-09-01 20:30:02] INFO job_ods_txnl_load 加载完成 SUCCESS rows_loaded=1242510
+[2026-09-01 20:41:00] INFO job_ods_acct_bal_load 加载完成 SUCCESS rows_loaded=320150
+[2026-09-01 21:05:00] INFO job_dim_cust_sync 维表同步完成 SUCCESS rows_loaded=85301
+[2026-09-01 22:18:00] INFO job_dwd_txnl_clean 清洗完成 SUCCESS rows_loaded=1185230
+[2026-09-01 23:41:00] INFO job_dws_asset_agg 汇总完成 SUCCESS rows_loaded=96410
+[2026-09-02 05:00:10] INFO job_ads_rpt_gen 日报生成完成 SUCCESS rows_loaded=1

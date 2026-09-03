@@ -1,0 +1,10 @@
+[2026-09-02 20:00:00] INFO job_ods_cust_info_load 等待源文件 cust_info_20260902.dat
+[2026-09-02 20:45:30] WARN job_ods_cust_info_load 源文件仍未到达，源系统日切可能异常
+[2026-09-02 21:00:01] ERROR job_ods_cust_info_load 源文件等待超时 FAILED: FTP-TIMEOUT 客户信息文件等待超时（等待上限 60 分钟）
+[2026-09-02 20:30:02] INFO job_ods_txnl_load 加载完成 SUCCESS rows_loaded=1240180
+[2026-09-02 20:41:00] INFO job_ods_acct_bal_load 加载完成 SUCCESS rows_loaded=319640
+[2026-09-02 21:00:02] INFO job_dim_cust_sync SKIPPED 上游 job_ods_cust_info_load 失败，调度跳过
+[2026-09-02 22:00:00] INFO job_dwd_txnl_clean SKIPPED 上游 job_dim_cust_sync 跳过，调度跳过
+[2026-09-02 23:30:00] INFO job_dws_asset_agg SKIPPED 上游 job_dwd_txnl_clean 跳过，调度跳过
+[2026-09-02 23:30:01] WARN job_dws_asset_agg 客户信息维表缺失，客户资产汇总无法计算
+[2026-09-03 05:00:00] INFO job_ads_rpt_gen SKIPPED 上游 job_dws_asset_agg 跳过，调度跳过
