@@ -9,7 +9,7 @@ const auth = require('../auth');
 const graph = loadGraph();
 auth.ensureAuthSchema(graph.db);
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '256kb' }));
 app.use(express.static(path.join(__dirname, '..', '..', 'public')));
 
 // ---- 认证 ----
@@ -29,10 +29,41 @@ app.get('/api/me', (req, res) => {
   res.json(user);
 });
 
+// 探活（开放，供运维/脚本不登录检查服务与知识库状态）
+const n = (t) => graph.db.prepare(`SELECT COUNT(*) AS c FROM ${t}`).get().c;
+app.get('/api/health', (req, res) => {
+  res.json({ ok: true, version: '0.3.0', kb: { tables: n('meta_tables'), jobs: n('jobs'), tickets: n('tickets'), cases: n('cases') } });
+});
+
 // 以下所有接口需登录（操作归属：案例/审计记录落到人）
 app.use('/api', auth.requireAuth(graph.db));
 
-const n = (t) => graph.db.prepare(`SELECT COUNT(*) AS c FROM ${t}`).get().c;
+// ---- 排查历史（审计留痕可视化：谁在何时查了什么、结论如何） ----
+app.get('/api/queries', (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
+  const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+  const total = graph.db.prepare('SELECT COUNT(*) AS c FROM query_log').get().c;
+  const items = graph.db.prepare(
+    'SELECT query_id, created_at, user_name, input_text, report_json FROM query_log ORDER BY created_at DESC LIMIT ? OFFSET ?'
+  ).all(limit, offset).map(r => {
+    const rep = JSON.parse(r.report_json || '{}');
+    return {
+      query_id: r.query_id, created_at: r.created_at, user: r.user_name || '-', input: r.input_text,
+      route: rep.route || 'other', confidence: rep.confidence || '-', summary: rep.summary || '',
+    };
+  });
+  res.json({ total, items });
+});
+
+app.get('/api/queries/:id', (req, res) => {
+  const row = graph.db.prepare('SELECT * FROM query_log WHERE query_id=?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: '查询记录不存在' });
+  res.json({
+    query_id: row.query_id, created_at: row.created_at, user: row.user_name || '-',
+    helpful: row.helpful || '', confirmed_cause: row.confirmed_cause || '',
+    report: JSON.parse(row.report_json),
+  });
+});
 
 app.get('/api/meta', (req, res) => {
   const latest = graph.db.prepare('SELECT MAX(run_date) AS d FROM job_runs').get().d;
@@ -119,7 +150,12 @@ route('post', '/api/troubleshoot', async (req, res) => {
 });
 
 route('post', '/api/feedback', (req, res) => {
-  res.json(saveFeedback(graph, req.body || {}, req.user.username));
+  const b = req.body || {};
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(b.query_id || ''))) {
+    return res.status(400).json({ ok: false, message: 'query_id 格式无效' });
+  }
+  if (!['yes', 'no'].includes(b.helpful)) return res.status(400).json({ ok: false, message: 'helpful 仅支持 yes/no' });
+  res.json(saveFeedback(graph, b, req.user.username));
 });
 
 const splitList = (s) => String(s || '').split(/[,，;；、\s]+/).map(x => x.trim()).filter(Boolean);
@@ -165,6 +201,14 @@ app.get('/api/cases', (req, res) => {
     error_code: c.error_code || '', source: c.source, created_at: c.created_at, created_by: c.created_by || '',
   }));
   res.json(rows);
+});
+
+// API 兜底：未知接口返回 JSON 而非静态页；全局错误统一 JSON 输出
+app.use('/api', (req, res) => res.status(404).json({ error: '接口不存在' }));
+app.use((err, req, res, next) => {
+  console.error(err);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: '服务异常：' + err.message });
 });
 
 app.listen(PORT, () => {

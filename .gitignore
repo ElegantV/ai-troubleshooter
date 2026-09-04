@@ -5,3 +5,5 @@ server.log
 !data/raw/logs/*.log
 .DS_Store
 .mimosa/
+frontend/node_modules/
+data/assistant.db-*

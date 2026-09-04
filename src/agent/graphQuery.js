@@ -7,6 +7,9 @@ const { DB_PATH } = require('../config');
 
 function loadGraph() {
   const db = new DatabaseSync(DB_PATH); // 读写连接：图谱查询为只读，query_log 审计需要写入
+  // 团队并发读写下避免写锁阻塞：WAL 允许读写并行，busy_timeout 遇锁等待而非立刻报错
+  db.prepare('PRAGMA journal_mode=WAL').get();
+  db.prepare('PRAGMA busy_timeout=5000').run();
   const g = {
     db,
     tables: db.prepare('SELECT * FROM meta_tables').all(),

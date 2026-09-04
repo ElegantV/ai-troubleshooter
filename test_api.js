@@ -8,8 +8,13 @@ async function post(path, body, withAuth = true) {
   return r.json();
 }
 async function get(path) { return fetch(BASE + path, { headers: { Authorization: 'Bearer ' + TOKEN } }).then(r => r.json()); }
+async function get0(path) { return fetch(BASE + path).then(r => r.json()); }
 
 async function main() {
+  // 探活（开放接口）
+  const health = await get0('/api/health');
+  console.log('=== 探活 ===', JSON.stringify(health));
+
   // 认证：未登录应被拒；注册+登录后正常访问
   const denied = await post('/api/troubleshoot', { text: 'job_dwd_txnl_clean 失败' }, false);
   console.log('=== 未登录访问被拒 ===', JSON.stringify(denied));
@@ -76,6 +81,23 @@ async function main() {
   // 必填校验
   const bad = await post('/api/cases', { title: 'x', symptom: 'y' });
   console.log('=== 必填校验 ===', JSON.stringify(bad));
+
+  // 反馈参数校验
+  const badFb = await post('/api/feedback', { query_id: 'not-a-uuid', helpful: 'maybe' });
+  console.log('\n=== 反馈参数校验 ===', JSON.stringify(badFb));
+
+  // 排查历史（审计可视化）
+  const history = await get('/api/queries?limit=5');
+  console.log('\n=== 排查历史 ===', `共 ${history.total} 条，返回 ${history.items.length} 条`);
+  history.items.slice(0, 3).forEach(q => console.log(`  ${q.created_at.slice(0, 19).replace('T', ' ')} [${q.user}] ${q.route}/${q.confidence} ${String(q.input).slice(0, 40)}`));
+  if (history.items.length) {
+    const detail = await get('/api/queries/' + history.items[0].query_id);
+    console.log('=== 历史详情 ===', '报告 sections:', detail.report.sections?.length, '| query_id 匹配:', detail.report.query_id === history.items[0].query_id);
+  }
+
+  // API 404 应返回 JSON
+  const nf = await get('/api/not-exist');
+  console.log('\n=== 未知接口 404 ===', JSON.stringify(nf));
 
   const cases = await get('/api/cases');
   console.log('\n案例库:', cases.map(c => c.case_id + '(' + c.source + (c.created_by ? ' by ' + c.created_by : '') + ')').join(', '));

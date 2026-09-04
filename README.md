@@ -4,6 +4,15 @@
 
 ## 架构（五层）
 
+前端已迁移至 **Vue 3 + Element Plus**（源码 `frontend/`，Vite 构建产物输出到 `public/` 由 Express 托管）：
+
+```bash
+npm run build:ui   # 前端构建（需先 cd frontend && npm install）
+npm run dev:ui     # 前端开发模式（5173 端口，/api 代理到 3000）
+```
+
+页面：智能排查 / 能力图示 / 案例库 / 排查历史（审计留痕可视化，可复看任意历史报告）
+
 ```
 应用交互层   Web 页面（public/index.html，原生 JS）
 智能体编排层 src/agent/  固定工作流：输入理解→场景路由→规则归因→案例检索→验证SQL→报告
@@ -17,9 +26,9 @@
 ## 运行
 
 ```bash
-npm run build   # 构建知识库（采集→血缘解析→图融合→日志结构化→案例索引）
-npm start       # 启动服务 http://localhost:3000
-node test_api.js  # 端到端测试（需服务已启动）
+npm run build      # 构建知识库（只刷新知识表；案例库/审计记录/用户全部保留）
+npm start          # 启动服务 http://localhost:3000
+node test_api.js   # 端到端测试（需服务已启动）
 ```
 
 依赖：Node.js ≥ 22（使用内置 node:sqlite，无需数据库安装）、express。

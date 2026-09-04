@@ -6,7 +6,9 @@
   "scripts": {
     "build": "node src/pipeline/build.js",
     "start": "node src/server/app.js",
-    "gen:tests": "node gen_tests.js"
+    "gen:tests": "node gen_tests.js",
+    "build:ui": "npm --prefix frontend run build",
+    "dev:ui": "npm --prefix frontend run dev"
   },
   "keywords": [],
   "author": "",
