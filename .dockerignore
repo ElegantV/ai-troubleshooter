@@ -1,0 +1,14 @@
+node_modules/
+frontend/node_modules/
+dist/
+.tools/
+data/assistant.db
+data/assistant.db-*
+data/*.db-shm
+data/*.db-wal
+server.log
+*.log
+.DS_Store
+.mimosa/
+.git/
+docs/*.xlsx

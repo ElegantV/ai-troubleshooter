@@ -1,11 +1,18 @@
 {
   "name": "ai-troubleshooter",
-  "version": "0.1.0",
-  "description": "AI问题排查助手原型：数据异常与批量作业失败场景（血缘+链路+案例+规则归因）",
-  "main": "index.js",
+  "version": "0.4.0",
+  "description": "AI问题排查助手：企业级重构（NestJS + TypeScript + PostgreSQL + Redis/BullMQ）",
+  "main": "dist/main.js",
   "scripts": {
-    "build": "node src/pipeline/build.js",
-    "start": "node src/server/app.js",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/main.js",
+    "dev": "tsx watch src/main.ts",
+    "migrate": "tsx src/infra/database/migrate.ts",
+    "seed": "tsx src/infra/database/seed.ts",
+    "migrate:sqlite": "tsx src/scripts/migrate-from-sqlite.ts",
+    "test": "vitest run",
+    "test:cov": "vitest run --coverage",
+    "test:e2e": "node scripts/debug-page.cjs",
     "gen:tests": "node gen_tests.js",
     "build:ui": "npm --prefix frontend run build",
     "dev:ui": "npm --prefix frontend run dev"
@@ -15,7 +22,37 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/config": "^4.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/mapped-types": "^2.0.6",
+    "@nestjs/platform-express": "^11.0.0",
+    "@nestjs/swagger": "^11.0.0",
+    "bullmq": "^5.20.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.1",
     "exceljs": "^4.4.0",
-    "express": "^5.2.1"
+    "ioredis": "^5.4.1",
+    "jsonwebtoken": "^9.0.2",
+    "knex": "^3.1.0",
+    "pg": "^8.13.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "swagger-ui-express": "^5.0.1"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "^11.0.0",
+    "@types/express": "^5.0.0",
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.11.10",
+    "@types/supertest": "^6.0.2",
+    "@vitest/coverage-v8": "^3.0.0",
+    "playwright": "^1.62.1",
+    "puppeteer-core": "^25.10.0",
+    "supertest": "^7.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.0"
   }
 }

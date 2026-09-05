@@ -1,0 +1,37 @@
+{
+  "systems": [
+    {
+      "code": "core",
+      "name": "核心账务",
+      "description": "交易明细、账户余额、资产汇总与监管报表加工",
+      "jobs": [
+        "job_ods_txnl_load",
+        "job_ods_acct_bal_load",
+        "job_dwd_txnl_clean",
+        "job_dws_asset_agg",
+        "job_ads_rpt_gen"
+      ],
+      "tables": [
+        "ods_txnl_detail",
+        "ods_acct_bal",
+        "dwd_txnl_detail_d",
+        "dws_cust_asset_d",
+        "ads_cust_asset_rpt"
+      ]
+    },
+    {
+      "code": "master",
+      "name": "客户主数据",
+      "description": "客户信息采集、公共维表同步",
+      "jobs": [
+        "job_ods_cust_info_load",
+        "job_dim_cust_sync"
+      ],
+      "tables": [
+        "ods_cust_info",
+        "dim_cust",
+        "dim_org"
+      ]
+    }
+  ]
+}
