@@ -36,7 +36,15 @@ export interface AppConfig {
  * 配置来源：环境变量（生产经 Nacos/Apollo + KMS 注入，代码内不出现任何明文密钥）。
  * 本对象为纯函数，便于测试注入。
  */
+const DEV_JWT_SECRET = 'dev-only-secret-change-me';
+
 export default (): { app: AppConfig } => {
+  const env = process.env.NODE_ENV || 'development';
+  const jwtSecret = process.env.JWT_SECRET || DEV_JWT_SECRET;
+  // 生产环境禁止使用开发默认密钥启动，避免 token 可被伪造
+  if (env === 'production' && jwtSecret === DEV_JWT_SECRET) {
+    throw new Error('生产环境必须通过 JWT_SECRET 环境变量注入强随机密钥，禁止使用开发默认值启动');
+  }
   const root = typeof __dirname !== 'undefined' ? path.join(__dirname, '..', '..') : process.cwd();
   return {
     app: {
@@ -55,7 +63,7 @@ export default (): { app: AppConfig } => {
         port: parseInt(process.env.REDIS_PORT || '6379', 10),
       },
       jwt: {
-        secret: process.env.JWT_SECRET || 'dev-only-secret-change-me',
+        secret: jwtSecret,
         expiresIn: process.env.JWT_EXPIRES_IN || '7d',
       },
       llm: {

@@ -22,8 +22,13 @@ export interface AuthProvider {
   exchangeCode?(code: string): Promise<AuthUser | null>;
 }
 
-function hash(password: string, salt: string): string {
-  return crypto.scryptSync(String(password), salt, 32).toString('hex');
+/** scrypt 异步版：避免阻塞事件循环（参数与历史 scryptSync 版一致，哈希结果互通） */
+function hash(password: string, salt: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    crypto.scrypt(String(password), salt, 32, (err, key) =>
+      err ? reject(err) : resolve(key.toString('hex')),
+    );
+  });
 }
 
 /** 本地实现：users 表 + scrypt 加盐哈希（原 src/auth.js 平移） */
@@ -35,7 +40,7 @@ export class LocalAuthProvider implements AuthProvider {
 
   async authenticate(username: string, password: string): Promise<AuthUser | null> {
     const u = await this.db('users').where({ username }).first();
-    if (!u || hash(password, u.salt) !== u.password_hash) return null;
+    if (!u || (await hash(password, u.salt)) !== u.password_hash) return null;
     return { username: u.username, display_name: u.display_name, role: u.role || 'user', system_code: u.system_code || '' };
   }
 
@@ -47,7 +52,7 @@ export class LocalAuthProvider implements AuthProvider {
     await this.db('users').insert({
       username: name,
       display_name: String(display_name || '').trim() || name,
-      password_hash: hash(password, salt),
+      password_hash: await hash(password, salt),
       salt,
       role: 'user',
       system_code,

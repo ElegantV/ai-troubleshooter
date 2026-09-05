@@ -14,3 +14,4 @@ server.log
 .workbuddy-ai/
 deploy/nginx.pid
 deploy/*.log
+logs/

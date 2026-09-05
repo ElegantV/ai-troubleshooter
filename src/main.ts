@@ -15,14 +15,16 @@ async function bootstrap(): Promise<void> {
   const cfg = app.get(ConfigService);
   const appCfg = cfg.get<AppConfig>('app')!;
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('AI 问题排查助手 API')
-    .setDescription('面向数据异常与批量作业失败场景的智能排查服务（NestJS + TypeScript + PostgreSQL + Redis）')
-    .setVersion('0.4.0')
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/docs', app, document);
+  // Swagger 仅开发环境开放，生产不暴露接口文档
+  if ((process.env.NODE_ENV || 'development') !== 'production') {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('AI 问题排查助手 API')
+      .setDescription('面向数据异常与批量作业失败场景的智能排查服务（NestJS + TypeScript + PostgreSQL + Redis）')
+      .setVersion('0.4.0')
+      .addBearerAuth()
+      .build();
+    SwaggerModule.setup('api/docs', app, SwaggerModule.createDocument(app, swaggerConfig));
+  }
 
   await app.listen(appCfg.port);
   console.log(`AI 问题排查助手已启动: http://localhost:${appCfg.port}  (Swagger: http://localhost:${appCfg.port}/api/docs)`);
