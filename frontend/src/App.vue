@@ -1,5 +1,7 @@
 <template>
-  <div class="wrap" v-if="auth.ready">
+  <!-- 未登录（含退出/会话过期）显示独立登录页；ready 之前先不渲染避免闪屏 -->
+  <LoginView v-if="auth.ready && !auth.user" />
+  <div class="wrap" v-else-if="auth.ready">
     <header class="hero">
       <div class="hero-inner">
         <div class="brand">
@@ -54,7 +56,6 @@
     </main>
 
     <footer class="foot">知识来源：表级血缘 × 作业链路 × 跑批日志 × 历史工单/案例 · 验证 SQL 仅供人工只读执行 · 所有查询已审计留痕并归属操作人</footer>
-    <LoginDialog />
   </div>
 </template>
 
@@ -62,7 +63,7 @@
 import { onMounted, ref } from 'vue';
 import { Search, Warning, ArrowDown, PriceTag } from '@element-plus/icons-vue';
 import { auth, ui, meta, initAuth, logout } from './store';
-import LoginDialog from './components/LoginDialog.vue';
+import LoginView from './views/LoginView.vue';
 import TroublePanel from './components/TroublePanel.vue';
 import GraphView from './components/GraphView.vue';
 import CasesView from './components/CasesView.vue';

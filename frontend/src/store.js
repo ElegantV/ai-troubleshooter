@@ -6,7 +6,7 @@ const API = '/api/v1';
 export const getToken = () => localStorage.getItem(TOKEN_KEY) || '';
 export const setToken = t => (t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY));
 
-export const auth = reactive({ user: null, ready: false, loginVisible: false, mode: 'login', msg: '' });
+export const auth = reactive({ user: null, ready: false, mode: 'login', msg: '' });
 export const ui = reactive({ activeTab: 'trouble', pendingInput: null });
 export const meta = reactive({ data: null });
 
@@ -23,7 +23,7 @@ export const ROUTE_LABEL = { job_failure: '作业失败', data_anomaly: '数据�
 
 /**
  * 统一请求：/api/v1 前缀 + {code,data,error} 包络解包。
- * 成功返回 data；401 时清除会话并弹出登录框；code!=0 抛错。
+ * 成功返回 data；401 时清除会话（App.vue 据此切换到登录页）；code!=0 抛错。
  */
 export async function api(path, opts = {}) {
   const url = path.startsWith('http') ? path : API + path;
@@ -34,7 +34,6 @@ export async function api(path, opts = {}) {
     setToken('');
     auth.user = null;
     auth.msg = '未登录或会话已过期，请重新登录';
-    auth.loginVisible = true;
     throw new Error('未登录');
   }
   if (body.code !== undefined) {
@@ -49,12 +48,12 @@ export async function loadMeta() {
 }
 
 export async function initAuth() {
-  if (!getToken()) { auth.loginVisible = true; auth.ready = true; return; }
+  if (!getToken()) { auth.ready = true; return; }
   try {
     const user = await api('/auth/me');
     auth.user = user;
     await loadMeta();
-  } catch (e) { setToken(''); auth.loginVisible = true; }
+  } catch (e) { setToken(''); }
   auth.ready = true;
 }
 
@@ -67,7 +66,6 @@ export async function doLogin({ username, password, display_name, system_code })
   if (!r.ok && !r.token) throw new Error(r.message || r.error || '操作失败');
   setToken(r.token);
   auth.user = r.user;
-  auth.loginVisible = false;
   auth.msg = '';
   await loadMeta();
   return r;
@@ -78,7 +76,6 @@ export async function logout() {
   setToken('');
   auth.user = null;
   auth.msg = '已退出登录';
-  auth.loginVisible = true;
 }
 
 /** 能力图示/演示卡一键带入智能排查 */

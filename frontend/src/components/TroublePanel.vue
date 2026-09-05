@@ -6,7 +6,7 @@
       <el-button type="primary" :loading="busy" :disabled="busy" @click="go">开始分析</el-button>
       <div class="examples">
         <span class="ex-label">示例</span>
-        <el-link v-for="ex in examples" :key="ex.label" type="primary" @click="input = ex.text; go()">{{ ex.label }}</el-link>
+        <el-link v-for="ex in examples" :key="ex.label" type="primary" @click="fillExample(ex)">{{ ex.label }}</el-link>
       </div>
     </div>
   </div>
@@ -39,6 +39,12 @@ const examples = [
   { label: '死锁排查', text: 'job_dws_asset_agg 晚上失败了，报 ORA-00060 死锁' },
   { label: '文件超时排查', text: 'job_ods_cust_info_load 昨天文件超时失败' },
 ];
+
+// 示例只填充不自动跑：避免与手动「开始分析」叠加成两条记录
+function fillExample(ex) {
+  input.value = ex.text;
+  ElMessage({ message: '已填入示例，点「开始分析」运行', type: 'info', duration: 1500 });
+}
 
 async function go() {
   if (busy.value) return; // 防重复提交：请求进行中忽略再次触发
