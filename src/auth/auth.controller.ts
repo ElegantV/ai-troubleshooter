@@ -1,27 +1,57 @@
-import { Body, Controller, Get, Headers, HttpCode, Post, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Get, Headers, HttpCode, Patch, Post, Req, UnauthorizedException } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Request } from 'express';
 import { AuthService } from './auth.service';
-import { LoginDto, RegisterDto } from './dto/auth.dto';
+import { AuthThrottleService } from './auth-throttle.service';
+import { CaptchaService } from './captcha.service';
+import { ChangePasswordDto, LoginDto, RegisterDto, UpdateProfileDto } from './dto/auth.dto';
 import { CurrentUser, Public, RequestUser } from '../common/decorators/auth.decorators';
 
 @ApiTags('认证')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly throttle: AuthThrottleService,
+    private readonly captcha: CaptchaService,
+  ) {}
+
+  /** nginx 反代场景取真实客户端 IP（XFF 可被伪造，仅用于限流计数，不用于审计归属） */
+  private clientIp(req: Request): string {
+    const xff = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+    return xff || req.ip || '';
+  }
 
   @Public()
   @Post('register')
   @ApiOperation({ summary: '注册（注册即自动登录）' })
-  register(@Body() dto: RegisterDto) {
+  async register(@Body() dto: RegisterDto, @Req() req: Request) {
+    await this.throttle.assertRegisterAllowed(this.clientIp(req));
     return this.auth.register(dto);
+  }
+
+  @Public()
+  @Get('captcha')
+  @ApiOperation({ summary: '登录图形验证码（一次性，5 分钟有效）' })
+  getCaptcha() {
+    return this.captcha.create();
   }
 
   @Public()
   @Post('login')
   @HttpCode(200)
-  @ApiOperation({ summary: '登录' })
-  login(@Body() dto: LoginDto) {
-    return this.auth.login(dto);
+  @ApiOperation({ summary: '登录（图形验证码 + 同 用户名+IP 连续失败 5 次锁定 15 分钟）' })
+  async login(@Body() dto: LoginDto, @Req() req: Request) {
+    const name = String(dto.username || '').trim().toLowerCase();
+    const ip = this.clientIp(req);
+    await this.throttle.assertLoginAllowed(name, ip);
+    if (!(await this.captcha.verify(dto.captcha_id, dto.captcha_code))) {
+      return { ok: false, message: '验证码不正确或已过期' };
+    }
+    const r = await this.auth.login(dto);
+    if (r.ok) await this.throttle.clearLoginFailures(name, ip);
+    else await this.throttle.recordLoginFailure(name, ip);
+    return r;
   }
 
   @Public()
@@ -46,5 +76,18 @@ export class AuthController {
   @ApiOperation({ summary: '当前登录用户（需登录）' })
   whoami(@CurrentUser() user: RequestUser) {
     return user;
+  }
+
+  @Patch('profile')
+  @ApiOperation({ summary: '维护个人资料（登录名/姓名/所属系统，改登录名返回新令牌）' })
+  updateProfile(@CurrentUser() user: RequestUser, @Body() dto: UpdateProfileDto) {
+    return this.auth.updateProfile(user.username, dto);
+  }
+
+  @Post('password')
+  @HttpCode(200)
+  @ApiOperation({ summary: '修改密码（需验证当前密码）' })
+  changePassword(@CurrentUser() user: RequestUser, @Body() dto: ChangePasswordDto) {
+    return this.auth.changePassword(user.username, dto);
   }
 }

@@ -5,7 +5,7 @@
     <header class="hero">
       <div class="hero-inner">
         <div class="brand">
-          <div class="brand-icon"><el-icon :size="22"><Search /></el-icon></div>
+          <div class="brand-icon"><img class="brand-ico" src="/favicon.svg" alt="" /></div>
           <div class="brand-text">
             <h1>AI 问题排查助手 <span class="ver">v0.4</span></h1>
             <div class="sub">面向数据异常与批量作业失败 · 血缘 / 链路 / 案例关联分析 · 规则归因（可解释可审计）</div>
@@ -18,6 +18,7 @@
           <span v-if="auth.user.system_code" class="who-sys">
             <el-icon class="who-ico"><PriceTag /></el-icon>{{ auth.user.system_code }}
           </span>
+          <el-link class="who-logout" @click="profileOpen = true">资料</el-link>
           <el-link class="who-logout" @click="logout()">退出</el-link>
         </div>
       </div>
@@ -56,20 +57,24 @@
     </main>
 
     <footer class="foot">知识来源：表级血缘 × 作业链路 × 跑批日志 × 历史工单/案例 · 验证 SQL 仅供人工只读执行 · 所有查询已审计留痕并归属操作人</footer>
+
+    <ProfileDialog v-model="profileOpen" />
   </div>
 </template>
 
 <script setup>
 import { onMounted, ref } from 'vue';
-import { Search, Warning, ArrowDown, PriceTag } from '@element-plus/icons-vue';
+import { Warning, ArrowDown, PriceTag } from '@element-plus/icons-vue';
 import { auth, ui, meta, initAuth, logout } from './store';
 import LoginView from './views/LoginView.vue';
+import ProfileDialog from './components/ProfileDialog.vue';
 import TroublePanel from './components/TroublePanel.vue';
 import GraphView from './components/GraphView.vue';
 import CasesView from './components/CasesView.vue';
 import QueriesView from './components/QueriesView.vue';
 
 const alertsOpen = ref(false);
+const profileOpen = ref(false);
 onMounted(initAuth);
 </script>
 
@@ -181,9 +186,10 @@ body {
 .brand-text { min-width: 0; }
 .brand-icon {
   width: 2.875rem; height: 2.875rem; border-radius: var(--r-lg); flex: none;
-  background: rgba(255, 255, 255, 0.18); display: flex; align-items: center; justify-content: center;
-  color: #fff; border: 1px solid rgba(255, 255, 255, 0.25);
+  overflow: hidden; box-shadow: 0 0.25rem 0.75rem -0.25rem rgba(0, 0, 0, 0.35);
 }
+/* icon 自带蓝底渐变，占满容器即可，无需容器再铺底色 */
+.brand-ico { display: block; width: 100%; height: 100%; }
 .hero h1 { font-size: var(--fs-h1); font-weight: 600; line-height: 1.3; }
 .hero .ver {
   font-size: var(--fs-cap); background: rgba(255, 255, 255, 0.22);

@@ -36,6 +36,7 @@ declare module 'vue' {
     ElTag: typeof import('element-plus/es')['ElTag']
     GraphView: typeof import('./src/components/GraphView.vue')['default']
     LineageSvg: typeof import('./src/components/LineageSvg.vue')['default']
+    ProfileDialog: typeof import('./src/components/ProfileDialog.vue')['default']
     QueriesView: typeof import('./src/components/QueriesView.vue')['default']
     ReportView: typeof import('./src/components/ReportView.vue')['default']
     TroublePanel: typeof import('./src/components/TroublePanel.vue')['default']

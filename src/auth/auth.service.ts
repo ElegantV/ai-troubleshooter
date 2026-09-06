@@ -64,6 +64,41 @@ export class AuthService {
     return { ok: true, token: this.sign(user), user };
   }
 
+  /**
+   * 维护个人资料（仅本人）。改登录名时 JWT 的 sub 变化，需重签令牌；
+   * query_log.user_name 为纯文本审计快照，历史记录保留改名前的用户名。
+   */
+  async updateProfile(
+    current: string,
+    input: { username?: string; display_name?: string; system_code?: string },
+  ): Promise<AuthResult> {
+    const patch: { username?: string; display_name?: string; system_code?: string } = {};
+    if (input.username !== undefined && input.username !== current) {
+      const name = String(input.username).trim().toLowerCase();
+      if (!USERNAME_RE.test(name)) return { ok: false, message: '用户名限 2-32 位小写字母/数字/下划线' };
+      const exists = await this.db('users').where({ username: name }).first();
+      if (exists) return { ok: false, message: `用户 ${name} 已存在` };
+      patch.username = name;
+    }
+    if (input.display_name !== undefined) patch.display_name = String(input.display_name);
+    if (input.system_code !== undefined) patch.system_code = String(input.system_code);
+    const user = await (this.provider as LocalAuthProvider).updateProfile(current, patch);
+    if (!user) return { ok: false, message: '用户不存在' };
+    return { ok: true, token: this.sign(user), user };
+  }
+
+  async changePassword(current: string, input: { old_password?: string; new_password?: string }): Promise<AuthResult> {
+    const oldPwd = String(input.old_password || '');
+    const newPwd = String(input.new_password || '');
+    if (!oldPwd || !newPwd) return { ok: false, message: '请输入当前密码和新密码' };
+    if (newPwd.length < 6) return { ok: false, message: '新密码至少 6 位' };
+    if (!(await this.provider.authenticate(current, oldPwd))) return { ok: false, message: '当前密码不正确' };
+    if (!(await (this.provider as LocalAuthProvider).setPassword(current, newPwd))) {
+      return { ok: false, message: '用户不存在' };
+    }
+    return { ok: true, message: '密码已更新' };
+  }
+
   sign(user: AuthUser): string {
     const options: jwt.SignOptions = { expiresIn: this.expiresIn as jwt.SignOptions['expiresIn'], jwtid: cryptoRandom() };
     return jwt.sign({ sub: user.username, name: user.display_name, role: user.role, sys: user.system_code }, this.secret, options);

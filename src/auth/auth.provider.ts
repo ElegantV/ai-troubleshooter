@@ -60,6 +60,33 @@ export class LocalAuthProvider implements AuthProvider {
     });
     return { username: name, display_name: String(display_name || '').trim() || name, role: 'user', system_code };
   }
+
+  /** 维护个人资料：可改登录名/姓名/所属系统。改登录名前由调用方校验唯一性 */
+  async updateProfile(
+    username: string,
+    patch: { username?: string; display_name?: string; system_code?: string },
+  ): Promise<AuthUser | null> {
+    const updates: Record<string, string> = {};
+    if (patch.username !== undefined) updates.username = patch.username;
+    if (patch.display_name !== undefined) updates.display_name = String(patch.display_name).trim();
+    if (patch.system_code !== undefined) updates.system_code = String(patch.system_code).trim();
+    if (!Object.keys(updates).length) return this.get(username);
+    const n = await this.db('users').where({ username }).update(updates);
+    if (!n) return null;
+    return this.get(updates.username || username);
+  }
+
+  /** 改密码：旧密码校验由调用方先做（authenticate） */
+  async setPassword(username: string, newPassword: string): Promise<boolean> {
+    const salt = crypto.randomBytes(16).toString('hex');
+    const n = await this.db('users').where({ username }).update({ password_hash: await hash(newPassword, salt), salt });
+    return n > 0;
+  }
+
+  async get(username: string): Promise<AuthUser | null> {
+    const u = await this.db('users').where({ username }).first();
+    return u ? { username: u.username, display_name: u.display_name, role: u.role || 'user', system_code: u.system_code || '' } : null;
+  }
 }
 
 /** SSO 适配器占位：AUTH_PROVIDER=sso 时启用。生产实现 OIDC 授权码流程 + 用户角色映射（LDAP 组 → role） */

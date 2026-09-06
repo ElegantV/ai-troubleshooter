@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1e3a8a"/>
+      <stop offset="1" stop-color="#2563eb"/>
+    </linearGradient>
+  </defs>
+  <!-- 底板：企业蓝渐变圆角方块，与 Hero 区一致 -->
+  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
+  <!-- 放大镜镜片（排查） -->
+  <circle cx="27" cy="27" r="14" fill="rgba(255,255,255,0.14)" stroke="#fff" stroke-width="4.5"/>
+  <!-- 镜片内的数据折线，末端骤降（数据异常） -->
+  <polyline points="17.5,21 22,27 26,24 32,34" fill="none" stroke="#bfdbfe" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- 异常点 -->
+  <circle cx="32" cy="34" r="3" fill="#fbbf24"/>
+  <!-- 镜柄 -->
+  <line x1="38.5" y1="38.5" x2="49.5" y2="49.5" stroke="#fff" stroke-width="6" stroke-linecap="round"/>
+</svg>

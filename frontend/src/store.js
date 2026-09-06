@@ -57,17 +57,33 @@ export async function initAuth() {
   auth.ready = true;
 }
 
-export async function doLogin({ username, password, display_name, system_code }) {
+export async function doLogin(input) {
   const path = auth.mode === 'login' ? 'login' : 'register';
   const r = await api('/auth/' + path, {
     method: 'POST',
-    body: JSON.stringify({ username, password, display_name, system_code }),
+    // 注册接口的 DTO 白名单会忽略多余字段（如验证码），直接透传完整输入
+    body: JSON.stringify(input),
   });
   if (!r.ok && !r.token) throw new Error(r.message || r.error || '操作失败');
   setToken(r.token);
   auth.user = r.user;
   auth.msg = '';
   await loadMeta();
+  return r;
+}
+
+/** 维护个人资料：后端改了登录名/姓名/所属系统会重签 JWT，这里同步替换令牌与用户 */
+export async function updateProfile(payload) {
+  const r = await api('/auth/profile', { method: 'PATCH', body: JSON.stringify(payload) });
+  if (!r.ok) throw new Error(r.message || '保存失败');
+  if (r.token) setToken(r.token);
+  auth.user = r.user;
+  return r;
+}
+
+export async function changePassword(payload) {
+  const r = await api('/auth/password', { method: 'POST', body: JSON.stringify(payload) });
+  if (!r.ok) throw new Error(r.message || '修改失败');
   return r;
 }
 

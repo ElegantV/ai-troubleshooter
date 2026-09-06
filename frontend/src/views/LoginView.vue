@@ -2,7 +2,7 @@
   <div class="login-page">
     <div class="login-card">
       <div class="login-brand">
-        <div class="login-brand-icon"><el-icon :size="24"><Search /></el-icon></div>
+        <div class="login-brand-icon"><img class="login-ico" src="/favicon.svg" alt="" /></div>
         <h1>AI 问题排查助手 <span class="login-ver">v0.4</span></h1>
         <p class="login-sub">面向数据异常与批量作业失败 · 血缘 / 链路 / 案例关联分析 · 规则归因（可解释可审计）</p>
       </div>
@@ -22,6 +22,13 @@
         </el-form-item>
         <el-form-item label="密码">
           <el-input v-model="form.password" type="password" show-password placeholder="至少 6 位" @keyup.enter="submit" />
+        </el-form-item>
+        <el-form-item v-if="auth.mode === 'login'" label="验证码">
+          <div class="captcha-row">
+            <el-input v-model="form.captcha_code" placeholder="不区分大小写" maxlength="4" @keyup.enter="submit" />
+            <img v-if="captcha.img" class="captcha-img" :src="captcha.img" title="看不清？点击刷新" alt="验证码" @click="loadCaptcha" />
+            <div v-else class="captcha-img captcha-loading" @click="loadCaptcha">加载中…</div>
+          </div>
         </el-form-item>
         <el-form-item v-if="auth.mode === 'register'" label="姓名（可选，用于案例展示）">
           <el-input v-model="form.display_name" @keyup.enter="submit" />
@@ -49,18 +56,27 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
-import { Search } from '@element-plus/icons-vue';
 import { api, auth, doLogin } from '../store';
 
-const form = reactive({ username: '', password: '', display_name: '', system_code: '' });
+const form = reactive({ username: '', password: '', captcha_code: '', display_name: '', system_code: '' });
 const err = ref('');
 const busy = ref(false);
 const systems = ref([]);
+const captcha = reactive({ id: '', img: '' });
+
+async function loadCaptcha() {
+  try {
+    const c = await api('/auth/captcha');
+    captcha.id = c.captcha_id;
+    captcha.img = c.image;
+    form.captcha_code = '';
+  } catch (e) { /* 公开接口，失败时用户可点击重试 */ }
+}
 
 async function loadSystems() {
   try { systems.value = await api('/systems'); } catch (e) { /* 公开接口，忽略 */ }
 }
-onMounted(loadSystems);
+onMounted(() => { loadSystems(); loadCaptcha(); });
 
 function switchMode() {
   auth.mode = auth.mode === 'login' ? 'register' : 'login';
@@ -70,12 +86,18 @@ function switchMode() {
 async function submit() {
   err.value = '';
   if (!form.username || !form.password) { err.value = '请输入用户名和密码'; return; }
+  if (auth.mode === 'login') {
+    if (!captcha.id) { err.value = '验证码未加载，请点击验证码图片重试'; loadCaptcha(); return; }
+    if (!form.captcha_code) { err.value = '请输入验证码'; return; }
+  }
   busy.value = true;
   try {
-    await doLogin(form);
+    await doLogin({ ...form, captcha_id: captcha.id });
     ElMessage.success(auth.mode === 'register' ? '注册成功，已自动登录' : '登录成功');
   } catch (e) {
     err.value = e.message;
+    // 验证码一次性消费：无论失败原因，换一张再试
+    if (auth.mode === 'login') loadCaptcha();
   }
   busy.value = false;
 }
@@ -100,17 +122,23 @@ async function submit() {
 }
 .login-brand { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--sp-2); }
 .login-brand-icon {
-  width: 2.875rem; height: 2.875rem; border-radius: var(--r-lg);
-  background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
-  color: #fff; display: flex; align-items: center; justify-content: center;
+  width: 2.875rem; height: 2.875rem; border-radius: var(--r-lg); overflow: hidden;
   box-shadow: 0 0.375rem 1rem -0.375rem rgba(37, 99, 235, 0.5);
 }
+.login-ico { display: block; width: 100%; height: 100%; }
 .login-brand h1 { font-size: var(--fs-h1); font-weight: 600; line-height: 1.3; }
 .login-ver {
   font-size: var(--fs-cap); background: var(--el-color-primary-light-9); color: var(--el-color-primary);
   padding: 0.125rem 0.5rem; border-radius: var(--r-pill); font-weight: 500; vertical-align: 0.125rem;
 }
 .login-sub { font-size: var(--fs-cap); color: var(--ink-muted); line-height: 1.7; }
+
+.captcha-row { display: flex; gap: var(--sp-2); width: 100%; }
+.captcha-img {
+  width: 8.25rem; height: 2.75rem; flex: none; cursor: pointer;
+  border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface-sunken);
+}
+.captcha-loading { display: flex; align-items: center; justify-content: center; font-size: var(--fs-cap); color: var(--ink-faint); }
 
 .login-alert { margin: var(--sp-4) 0 0; }
 .login-title {
