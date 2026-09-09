@@ -1,4 +1,5 @@
 import * as path from 'path';
+import { cleanEnv, num, str } from 'envalid';
 
 export interface DatabaseConfig {
   host: string;
@@ -30,50 +31,96 @@ export interface AppConfig {
   jwt: { secret: string; expiresIn: string };
   llm: LlmConfig;
   collectionIntervalMinutes: number;
+  trustProxy: string;
 }
 
 /**
  * 配置来源：环境变量（生产经 Nacos/Apollo + KMS 注入，代码内不出现任何明文密钥）。
- * 本对象为纯函数，便于测试注入。
+ * 全部经 envalid 校验：类型错误 / 必填缺失 / 数值越界会在启动时 fail-fast，
+ * 避免拼错变量名静默回退默认值导致的"生产行为漂移"。
  */
 const DEV_JWT_SECRET = 'dev-only-secret-change-me';
 
+/** 已知弱默认值/占位符，任何环境（尤其生产）都禁止直接使用，避免 token 可被伪造 */
+const WEAK_JWT_SECRETS = new Set(['dev-only-secret-change-me', 'change-me-in-production', 'change-me', 'secret']);
+const MIN_JWT_SECRET_LENGTH = 32;
+
 export default (): { app: AppConfig } => {
   const env = process.env.NODE_ENV || 'development';
-  const jwtSecret = process.env.JWT_SECRET || DEV_JWT_SECRET;
-  // 生产环境禁止使用开发默认密钥启动，避免 token 可被伪造
-  if (env === 'production' && jwtSecret === DEV_JWT_SECRET) {
-    throw new Error('生产环境必须通过 JWT_SECRET 环境变量注入强随机密钥，禁止使用开发默认值启动');
-  }
   const root = typeof __dirname !== 'undefined' ? path.join(__dirname, '..', '..') : process.cwd();
+
+  const cleaned = cleanEnv(process.env, {
+    PORT: num({ default: 3000 }),
+    DB_HOST: str({ default: '127.0.0.1' }),
+    DB_PORT: num({ default: 5432 }),
+    DB_USER: str({ default: 'a1-6' }),
+    DB_PASSWORD: str({ default: '' }),
+    DB_NAME: str({ default: 'assistant' }),
+    REDIS_HOST: str({ default: '127.0.0.1' }),
+    REDIS_PORT: num({ default: 6379 }),
+    JWT_SECRET: str({ default: DEV_JWT_SECRET }),
+    JWT_EXPIRES_IN: str({ default: '7d' }),
+    LLM_ENABLED: str({ default: 'false' }),
+    LLM_BASE_URL: str({ default: '' }),
+    LLM_API_KEY: str({ default: '' }),
+    LLM_MODEL: str({ default: '' }),
+    LLM_TIMEOUT_MS: num({ default: 30000 }),
+    COLLECT_INTERVAL_MINUTES: num({ default: 10 }),
+    TRUST_PROXY: str({ default: 'loopback' }),
+    RAW_DIR: str({ default: path.join(root, 'data', 'raw') }),
+  });
+
+  const collectIntervalMinutes = cleaned.COLLECT_INTERVAL_MINUTES!;
+  if (collectIntervalMinutes < 1 || collectIntervalMinutes > 1440) {
+    throw new Error(`COLLECT_INTERVAL_MINUTES 超出合法范围（1~1440 分钟），当前 ${collectIntervalMinutes}`);
+  }
+  const llmTimeoutMs = cleaned.LLM_TIMEOUT_MS!;
+  if (llmTimeoutMs < 1000) {
+    throw new Error(`LLM_TIMEOUT_MS 过小（<1000ms），当前 ${llmTimeoutMs}`);
+  }
+
+  const jwtSecret = cleaned.JWT_SECRET!;
+  const isWeak =
+    WEAK_JWT_SECRETS.has(jwtSecret) ||
+    jwtSecret.length < MIN_JWT_SECRET_LENGTH ||
+    jwtSecret === jwtSecret.toLowerCase().trim();
+  if (env === 'production' && isWeak) {
+    throw new Error(
+      `生产环境 JWT_SECRET 必须是长度 >= ${MIN_JWT_SECRET_LENGTH} 的强随机密钥（含大小写/数字/符号），当前配置过于薄弱，已拒绝启动`,
+    );
+  }
+
   return {
     app: {
       root,
-      rawDir: process.env.RAW_DIR || path.join(root, 'data', 'raw'),
-      port: parseInt(process.env.PORT || '3000', 10),
+      rawDir: cleaned.RAW_DIR!,
+      port: cleaned.PORT!,
       db: {
-        host: process.env.DB_HOST || '127.0.0.1',
-        port: parseInt(process.env.DB_PORT || '5432', 10),
-        user: process.env.DB_USER || 'a1-6',
-        password: process.env.DB_PASSWORD || '',
-        name: process.env.DB_NAME || 'assistant',
+        host: cleaned.DB_HOST!,
+        port: cleaned.DB_PORT!,
+        user: cleaned.DB_USER!,
+        password: cleaned.DB_PASSWORD!,
+        name: cleaned.DB_NAME!,
       },
       redis: {
-        host: process.env.REDIS_HOST || '127.0.0.1',
-        port: parseInt(process.env.REDIS_PORT || '6379', 10),
+        host: cleaned.REDIS_HOST!,
+        port: cleaned.REDIS_PORT!,
       },
       jwt: {
         secret: jwtSecret,
-        expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+        expiresIn: cleaned.JWT_EXPIRES_IN!,
       },
       llm: {
-        enabled: process.env.LLM_ENABLED === 'true',
-        baseUrl: process.env.LLM_BASE_URL || '',
-        apiKey: process.env.LLM_API_KEY || '',
-        model: process.env.LLM_MODEL || '',
-        timeoutMs: parseInt(process.env.LLM_TIMEOUT_MS || '30000', 10),
+        enabled: cleaned.LLM_ENABLED! === 'true',
+        baseUrl: cleaned.LLM_BASE_URL!,
+        apiKey: cleaned.LLM_API_KEY!,
+        model: cleaned.LLM_MODEL!,
+        timeoutMs: llmTimeoutMs,
       },
-      collectionIntervalMinutes: parseInt(process.env.COLLECT_INTERVAL_MINUTES || '10', 10),
+      collectionIntervalMinutes: collectIntervalMinutes,
+      // 可信任反代(nginx/网关)来源：影响 X-Forwarded-For 是否可信。
+      // 默认 loopback(本机反代)；生产按网段收紧，如 10.0.0.0/8,172.16.0.0/12
+      trustProxy: cleaned.TRUST_PROXY!,
     },
   };
 };

@@ -21,6 +21,7 @@
 
 ```bash
 # 前置：本机 PostgreSQL(127.0.0.1:5432) + Redis(127.0.0.1:6379)
+cp .env.example .env   # 按需修改
 npm install
 npm run migrate     # 建表（版本化迁移，幂等）
 npm run seed        # 从 data/raw 刷新知识库（保留案例/审计/用户）
@@ -33,6 +34,12 @@ npm run dev         # 开发热重载（tsx watch）
 npm run dev:ui      # 前端开发模式（5173，/api 代理到 3000）
 ```
 
+前端工程化门禁（ESLint + vue-tsc + prettier，构建自动执行）：
+
+```bash
+npm --prefix frontend run lint / typecheck / format
+```
+
 首次从旧版 SQLite 迁移存量数据（案例/审计/用户）：
 
 ```bash
@@ -42,10 +49,29 @@ npm run migrate:sqlite
 Docker 一键运行：
 
 ```bash
-docker compose up --build   # postgres + redis + backend 全部就绪
+docker compose up --build   # nginx(8080 静态+反代) + postgres + redis + backend 全部就绪
 ```
 
+运维探活接口（无需登录）：
+
+| 路径 | 用途 |
+|---|---|
+| `/api/health` | 服务与知识库规模（Docker HEALTHCHECK 用） |
+| `/api/health/live` | liveness：进程存活即 200 |
+| `/api/health/ready` | readiness：DB + Redis 探测，任一不可用返回 503 |
+
+日志：pino 结构化 JSON（含 `requestId` / `userId`，透传 `x-request-id` 请求头，认证头自动脱敏）。
+
 配置全部走环境变量（`DB_*` / `REDIS_*` / `JWT_SECRET` / `LLM_*`），生产经配置中心 + KMS 注入，代码内无明文密钥。
+环境变量经 envalid 校验：类型错误/越界启动即失败（fail-fast），模板见 `.env.example`（`cp .env.example .env` 起本地）。
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `JWT_SECRET` | dev 默认值 | **生产必须** >=32 字符强随机密钥，弱值直接拒绝启动 |
+| `TRUST_PROXY` | `loopback` | 可信任反代来源，决定 `X-Forwarded-For` 是否可信（限流取真实 IP） |
+| `CORS_ORIGINS` | 空（禁跨域） | 逗号分隔允许来源，如 `https://ats.example.com` |
+| `LOG_LEVEL` | `info` | pino 结构化日志级别 |
+| `COLLECT_INTERVAL_MINUTES` | 10 | 知识库定时采集周期（1~1440 校验） |
 
 ## 已实现能力
 

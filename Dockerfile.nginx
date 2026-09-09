@@ -1,0 +1,13 @@
+# 静态托管 + 反向代理层（docker compose 的 nginx 服务）
+# 复用主 Dockerfile 的 UI 构建产物（repo/public），拷贝容器版 nginx 配置与安全头
+FROM nginx:1.27-alpine
+
+COPY public/ /usr/share/nginx/html/
+COPY deploy/nginx.docker.conf /etc/nginx/nginx.conf
+COPY deploy/security-headers.conf /etc/nginx/conf.d/security-headers.conf
+
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
+  CMD wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1
+
+CMD ["nginx", "-g", "daemon off;"]

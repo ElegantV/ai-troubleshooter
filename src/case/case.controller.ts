@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { IsNotEmpty, IsOptional } from 'class-validator';
 import { CaseService } from './case.service';
@@ -33,9 +33,11 @@ export class CaseController {
   constructor(private readonly cases: CaseService) {}
 
   @Get()
-  @ApiOperation({ summary: '案例列表' })
-  list() {
-    return this.cases.list();
+  @ApiOperation({ summary: '案例列表（分页，limit 默认 100 上限 200）' })
+  list(@Query('limit') limit?: string, @Query('offset') offset?: string) {
+    const l = Math.min(parseInt(limit || '100', 10) || 100, 200);
+    const o = Math.max(parseInt(offset || '0', 10) || 0, 0);
+    return this.cases.list(l, o);
   }
 
   @Post()

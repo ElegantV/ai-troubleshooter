@@ -16,10 +16,14 @@ export class AuthController {
     private readonly captcha: CaptchaService,
   ) {}
 
-  /** nginx 反代场景取真实客户端 IP（XFF 可被伪造，仅用于限流计数，不用于审计归属） */
+  /**
+   * 取真实客户端 IP：trust proxy 已配置（TRUST_PROXY，仅信任反代网段），
+   * req.ips[0] 为 Express 剥离伪造头后的首个外网 IP；直连时回退 req.ip。
+   * 仅用于限流计数，不用于审计归属。
+   */
   private clientIp(req: Request): string {
-    const xff = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-    return xff || req.ip || '';
+    const ips = req.ips;
+    return (ips && ips.length > 0 ? ips[0] : req.ip) || '';
   }
 
   @Public()

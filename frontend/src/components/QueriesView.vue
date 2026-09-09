@@ -1,6 +1,8 @@
 <template>
   <div class="panel">
-    <h3><el-icon class="h3-ico"><Clock /></el-icon>排查历史</h3>
+    <h3>
+      <el-icon class="h3-ico"><Clock /></el-icon>排查历史
+    </h3>
     <div class="panel-sub">审计留痕，归属到人；点击行复看完整报告</div>
     <el-table :data="items" size="small" v-loading="loading" max-height="60vh">
       <el-table-column label="时间" :min-width="colW(10)">
@@ -13,11 +15,17 @@
         </template>
       </el-table-column>
       <el-table-column v-if="vp.bp === 'lg'" label="场景" :min-width="colW(7)">
-        <template #default="{ row }"><el-tag size="small" effect="plain">{{ ROUTE_LABEL[row.route] || row.route }}</el-tag></template>
+        <template #default="{ row }"
+          ><el-tag size="small" effect="plain">{{ ROUTE_LABEL[row.route] || row.route }}</el-tag></template
+        >
       </el-table-column>
       <el-table-column v-if="vp.bp !== 'sm'" label="置信度" :min-width="colW(6)">
         <template #default="{ row }">
-          <el-tag size="small" :type="row.confidence === '高' ? 'danger' : row.confidence === '中' ? 'warning' : 'info'">{{ row.confidence }}</el-tag>
+          <el-tag
+            size="small"
+            :type="row.confidence === '高' ? 'danger' : row.confidence === '中' ? 'warning' : 'info'"
+            >{{ row.confidence }}</el-tag
+          >
         </template>
       </el-table-column>
       <el-table-column :min-width="colW(5)" align="right">
@@ -31,7 +39,15 @@
       <el-button size="small" @click="loadMore">加载更多（{{ items.length }}/{{ total }}）</el-button>
     </div>
 
-    <el-dialog v-model="dlg" title="排查报告复看" class="report-dlg" body-class="report-dlg-body" width="min(48.75rem, 92vw)" top="4vh" destroy-on-close>
+    <el-dialog
+      v-model="dlg"
+      title="排查报告复看"
+      class="report-dlg"
+      body-class="report-dlg-body"
+      width="min(48.75rem, 92vw)"
+      top="4vh"
+      destroy-on-close
+    >
       <div v-if="detail" class="dlg-head">
         <div class="dlg-meta">
           {{ fmtTime(detail.created_at) }} · 操作人 {{ detail.user }}
@@ -45,10 +61,12 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue';
+import { ref } from 'vue';
 import { Clock } from '@element-plus/icons-vue';
-import { api, ui, vp, colW, ROUTE_LABEL } from '../store';
+import { api, vp, colW, ROUTE_LABEL } from '../store';
 import ReportView from './ReportView.vue';
+import { fmtTime } from '../utils/format';
+import { useTabReload } from '../composables/useTabReload';
 
 const items = ref([]);
 const total = ref(0);
@@ -57,15 +75,15 @@ const dlg = ref(false);
 const detail = ref(null);
 const PAGE = 20;
 
-const fmtTime = s => String(s || '').slice(0, 19).replace('T', ' ');
-
 async function load(offset) {
   loading.value = true;
   try {
     const r = await api(`/queries?limit=${PAGE}&offset=${offset}`);
     total.value = r.total;
     items.value = offset === 0 ? r.items : [...items.value, ...r.items];
-  } finally { loading.value = false; }
+  } finally {
+    loading.value = false;
+  }
 }
 const loadMore = () => load(items.value.length);
 
@@ -74,37 +92,58 @@ async function open(row) {
   dlg.value = true;
 }
 
-watch(() => ui.activeTab, v => { if (v === 'queries') load(0); }, { immediate: true });
+useTabReload('queries', () => load(0));
 </script>
 
 <style scoped>
-.h3-ico { font-size: 1rem; }
-.tbl-empty { font-size: var(--fs-body); color: var(--ink-faint); }
+.tbl-empty {
+  font-size: var(--fs-body);
+  color: var(--ink-faint);
+}
 
 .row-link {
-  font-size: var(--fs-body); font-weight: 400; justify-content: flex-start;
-  text-align: left; line-height: 1.5;
+  font-size: var(--fs-body);
+  font-weight: 400;
+  justify-content: flex-start;
+  text-align: left;
+  line-height: 1.5;
 }
-.row-link :deep(.el-link__inner) { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-link :deep(.el-link__inner) {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
-.load-more { margin-top: var(--sp-3); text-align: center; }
+.load-more {
+  margin-top: var(--sp-3);
+  text-align: center;
+}
 
 .dlg-meta {
-  font-size: var(--fs-cap); color: var(--ink-muted); margin-bottom: var(--sp-2);
+  font-size: var(--fs-cap);
+  color: var(--ink-muted);
+  margin-bottom: var(--sp-2);
 }
 
 .dlg-head {
-  position: sticky; top: 0; z-index: 2;
+  position: sticky;
+  top: 0;
+  z-index: 2;
   background: var(--surface);
   padding: var(--sp-3) 0 var(--sp-2);
   border-bottom: 1px solid var(--line-soft);
 }
 
 .dlg-input {
-  font-size: var(--fs-body); color: var(--ink); line-height: 1.6;
-  background: var(--line-soft); border-radius: 6px;
+  font-size: var(--fs-body);
+  color: var(--ink);
+  line-height: 1.6;
+  background: var(--line-soft);
+  border-radius: 6px;
   padding: var(--sp-2) var(--sp-3);
-  word-break: break-word; white-space: pre-wrap;
+  word-break: break-word;
+  white-space: pre-wrap;
 }
 </style>
 
@@ -113,7 +152,8 @@ watch(() => ui.activeTab, v => { if (v === 'queries') load(0); }, { immediate: t
    弹窗可能被 teleport 到 body，样式不能走 scoped */
 .report-dlg.el-dialog {
   max-height: 92vh;
-  display: flex; flex-direction: column;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   margin-bottom: 0;
   padding: 0;
@@ -123,15 +163,22 @@ watch(() => ui.activeTab, v => { if (v === 'queries') load(0); }, { immediate: t
   padding: var(--el-dialog-padding-primary) var(--pad-panel) var(--sp-3);
   border-bottom: 1px solid var(--line-soft);
 }
-.report-dlg .el-dialog__headerbtn { top: var(--el-dialog-padding-primary); right: var(--pad-panel); }
+.report-dlg .el-dialog__headerbtn {
+  top: var(--el-dialog-padding-primary);
+  right: var(--pad-panel);
+}
 .report-dlg-body {
-  flex: 1 1 auto; min-height: 0;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   padding: 0 var(--pad-panel) var(--pad-panel);
 }
 /* ReportView 自带的 panel 外壳与弹窗形成双层描边，拍平融入弹窗 */
 .report-dlg .panel {
-  margin-top: 0; padding: 0;
-  background: transparent; border: none; box-shadow: none;
+  margin-top: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 </style>

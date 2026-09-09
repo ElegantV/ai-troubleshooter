@@ -37,13 +37,25 @@ services:
       DB_NAME: assistant
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      # 生产必须显式注入强随机 JWT_SECRET（>=32 字符，含大小写/数字/符号），缺失将拒绝启动
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET 必须显式注入强随机密钥}
+      TRUST_PROXY: loopback
       RAW_DIR: /app/data/raw
       COLLECT_INTERVAL_MINUTES: 10
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
+    ports:
+      - "8080:8080"
+    depends_on:
+      backend:
         condition: service_healthy
 
 volumes:

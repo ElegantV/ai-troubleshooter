@@ -47,9 +47,18 @@ export class ProcAnalysisService {
     const tgtTables = [...new Set(inserts.map((i) => i.tgt).concat(edges.map((e) => e.tgt_table)))];
     const srcTables = [...new Set(edges.map((e) => e.src_table))];
     const allTables = [...new Set([...srcTables, ...tgtTables])];
-    const known = (t: string) => this.graph.tables.some((x) => x.name === t);
-    const partColOf = (t: string) => (this.graph.columns.find((c) => c.table_name === t && PART_RE.test(c.column_name)) || {}).column_name || null;
-    const notNullCols = (t: string) => this.graph.columns.filter((c) => c.table_name === t && c.nullable === 'N').map((c) => c.column_name);
+
+    // 内存态建立索引（列按表分组 / 表按名），避免后续逐表 find/filter 的 O(n²) 扫描
+    const tablesByName = new Map(this.graph.tables.map((t) => [t.name, t]));
+    const columnsByTable = new Map<string, typeof this.graph.columns>();
+    for (const c of this.graph.columns) {
+      const list = columnsByTable.get(c.table_name) || [];
+      list.push(c);
+      columnsByTable.set(c.table_name, list);
+    }
+    const known = (t: string) => tablesByName.has(t);
+    const partColOf = (t: string) => (columnsByTable.get(t) || []).find((c) => PART_RE.test(c.column_name))?.column_name || null;
+    const notNullCols = (t: string) => (columnsByTable.get(t) || []).filter((c) => c.nullable === 'N').map((c) => c.column_name);
 
     // ---- 2. 对象识别与血缘 ----
     impact.push(`目标表（写入）：${tgtTables.map((t) => (known(t) ? `${t}【在库】` : `${t}【知识库外】`)).join('、') || '未识别'}`);
@@ -70,8 +79,8 @@ export class ProcAnalysisService {
 
     // 表结构（限4张×16列）
     for (const t of allTables.filter(known).slice(0, 4)) {
-      const info = this.graph.tables.find((x) => x.name === t);
-      const cols = this.graph.columns.filter((c) => c.table_name === t).slice(0, 16).map((c) => [c.column_name, c.data_type || '', c.nullable === 'N' ? '非空' : '可空', c.comment || '']);
+      const info = tablesByName.get(t);
+      const cols = (columnsByTable.get(t) || []).slice(0, 16).map((c) => [c.column_name, c.data_type || '', c.nullable === 'N' ? '非空' : '可空', c.comment || '']);
       structures.push({ name: t, comment: info?.comment || '', inKb: true, columns: cols });
     }
     for (const t of allTables.filter((t) => !known(t)).slice(0, 3)) {

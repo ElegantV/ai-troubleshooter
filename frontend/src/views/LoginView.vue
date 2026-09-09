@@ -11,9 +11,11 @@
 
       <div class="login-title">{{ auth.mode === 'login' ? '登录' : '注册' }}</div>
       <p class="login-hint">
-        {{ auth.mode === 'login'
-          ? '登录后您的排查、案例录入与反馈将记录归属'
-          : '注册后自动登录，排查/反馈/案例将归属到您，沉淀为团队资产' }}
+        {{
+          auth.mode === 'login'
+            ? '登录后您的排查、案例录入与反馈将记录归属'
+            : '注册后自动登录，排查/反馈/案例将归属到您，沉淀为团队资产'
+        }}
       </p>
 
       <el-form label-position="top" @submit.prevent>
@@ -21,12 +23,25 @@
           <el-input v-model="form.username" placeholder="小写字母/数字/下划线" @keyup.enter="submit" />
         </el-form-item>
         <el-form-item label="密码">
-          <el-input v-model="form.password" type="password" show-password placeholder="至少 6 位" @keyup.enter="submit" />
+          <el-input
+            v-model="form.password"
+            type="password"
+            show-password
+            placeholder="至少 6 位"
+            @keyup.enter="submit"
+          />
         </el-form-item>
         <el-form-item v-if="auth.mode === 'login'" label="验证码">
           <div class="captcha-row">
             <el-input v-model="form.captcha_code" placeholder="不区分大小写" maxlength="4" @keyup.enter="submit" />
-            <img v-if="captcha.img" class="captcha-img" :src="captcha.img" title="看不清？点击刷新" alt="验证码" @click="loadCaptcha" />
+            <img
+              v-if="captcha.img"
+              class="captcha-img"
+              :src="captcha.img"
+              title="看不清？点击刷新"
+              alt="验证码"
+              @click="loadCaptcha"
+            />
             <div v-else class="captcha-img captcha-loading" @click="loadCaptcha">加载中…</div>
           </div>
         </el-form-item>
@@ -34,7 +49,13 @@
           <el-input v-model="form.display_name" @keyup.enter="submit" />
         </el-form-item>
         <el-form-item v-if="auth.mode === 'register'" label="所属系统（用于按系统收敛检索）">
-          <el-select v-model="form.system_code" clearable filterable placeholder="共享/公共（不限定系统）" style="width:100%">
+          <el-select
+            v-model="form.system_code"
+            clearable
+            filterable
+            placeholder="共享/公共（不限定系统）"
+            style="width: 100%"
+          >
             <el-option v-for="s in systems" :key="s.code" :label="`${s.name}（${s.code}）`" :value="s.code" />
           </el-select>
         </el-form-item>
@@ -43,7 +64,9 @@
           {{ auth.mode === 'login' ? '登录' : '注册并登录' }}
         </el-button>
         <div class="login-switch">
-          <template v-if="auth.mode === 'login'">没有账号？<el-link type="primary" @click="switchMode">注册一个</el-link></template>
+          <template v-if="auth.mode === 'login'"
+            >没有账号？<el-link type="primary" @click="switchMode">注册一个</el-link></template
+          >
           <template v-else>已有账号？<el-link type="primary" @click="switchMode">去登录</el-link></template>
         </div>
       </el-form>
@@ -70,13 +93,22 @@ async function loadCaptcha() {
     captcha.id = c.captcha_id;
     captcha.img = c.image;
     form.captcha_code = '';
-  } catch (e) { /* 公开接口，失败时用户可点击重试 */ }
+  } catch (e) {
+    /* 公开接口，失败时用户可点击重试 */
+  }
 }
 
 async function loadSystems() {
-  try { systems.value = await api('/systems'); } catch (e) { /* 公开接口，忽略 */ }
+  try {
+    systems.value = await api('/systems');
+  } catch (e) {
+    /* 公开接口，忽略 */
+  }
 }
-onMounted(() => { loadSystems(); loadCaptcha(); });
+onMounted(() => {
+  loadSystems();
+  loadCaptcha();
+});
 
 function switchMode() {
   auth.mode = auth.mode === 'login' ? 'register' : 'login';
@@ -85,10 +117,20 @@ function switchMode() {
 
 async function submit() {
   err.value = '';
-  if (!form.username || !form.password) { err.value = '请输入用户名和密码'; return; }
+  if (!form.username || !form.password) {
+    err.value = '请输入用户名和密码';
+    return;
+  }
   if (auth.mode === 'login') {
-    if (!captcha.id) { err.value = '验证码未加载，请点击验证码图片重试'; loadCaptcha(); return; }
-    if (!form.captcha_code) { err.value = '请输入验证码'; return; }
+    if (!captcha.id) {
+      err.value = '验证码未加载，请点击验证码图片重试';
+      loadCaptcha();
+      return;
+    }
+    if (!form.captcha_code) {
+      err.value = '请输入验证码';
+      return;
+    }
   }
   busy.value = true;
   try {
@@ -106,7 +148,9 @@ async function submit() {
 <style scoped>
 .login-page {
   min-height: 100vh;
-  display: flex; align-items: center; justify-content: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: var(--sp-6) var(--sp-4);
   background:
     radial-gradient(60rem 30rem at 110% -10%, rgba(37, 99, 235, 0.16), transparent 60%),
@@ -120,39 +164,105 @@ async function submit() {
   box-shadow: 0 0.625rem 1.875rem -0.75rem rgba(15, 23, 42, 0.18);
   padding: clamp(1.5rem, 1rem + 2vw, 2.25rem);
 }
-.login-brand { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--sp-2); }
+.login-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--sp-2);
+}
 .login-brand-icon {
-  width: 2.875rem; height: 2.875rem; border-radius: var(--r-lg); overflow: hidden;
+  width: 2.875rem;
+  height: 2.875rem;
+  border-radius: var(--r-lg);
+  overflow: hidden;
   box-shadow: 0 0.375rem 1rem -0.375rem rgba(37, 99, 235, 0.5);
 }
-.login-ico { display: block; width: 100%; height: 100%; }
-.login-brand h1 { font-size: var(--fs-h1); font-weight: 600; line-height: 1.3; }
+.login-ico {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.login-brand h1 {
+  font-size: var(--fs-h1);
+  font-weight: 600;
+  line-height: 1.3;
+}
 .login-ver {
-  font-size: var(--fs-cap); background: var(--el-color-primary-light-9); color: var(--el-color-primary);
-  padding: 0.125rem 0.5rem; border-radius: var(--r-pill); font-weight: 500; vertical-align: 0.125rem;
+  font-size: var(--fs-cap);
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--r-pill);
+  font-weight: 500;
+  vertical-align: 0.125rem;
 }
-.login-sub { font-size: var(--fs-cap); color: var(--ink-muted); line-height: 1.7; }
+.login-sub {
+  font-size: var(--fs-cap);
+  color: var(--ink-muted);
+  line-height: 1.7;
+}
 
-.captcha-row { display: flex; gap: var(--sp-2); width: 100%; }
+.captcha-row {
+  display: flex;
+  gap: var(--sp-2);
+  width: 100%;
+}
 .captcha-img {
-  width: 8.25rem; height: 2.75rem; flex: none; cursor: pointer;
-  border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface-sunken);
+  width: 8.25rem;
+  height: 2.75rem;
+  flex: none;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-sunken);
 }
-.captcha-loading { display: flex; align-items: center; justify-content: center; font-size: var(--fs-cap); color: var(--ink-faint); }
+.captcha-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--fs-cap);
+  color: var(--ink-faint);
+}
 
-.login-alert { margin: var(--sp-4) 0 0; }
+.login-alert {
+  margin: var(--sp-4) 0 0;
+}
 .login-title {
-  font-size: var(--fs-title); font-weight: 600; color: var(--brand-deep);
+  font-size: var(--fs-title);
+  font-weight: 600;
+  color: var(--brand-deep);
   margin-top: var(--sp-5);
 }
-.login-hint { font-size: var(--fs-cap); color: var(--ink-muted); margin: var(--sp-1) 0 var(--sp-3); line-height: 1.6; }
+.login-hint {
+  font-size: var(--fs-cap);
+  color: var(--ink-muted);
+  margin: var(--sp-1) 0 var(--sp-3);
+  line-height: 1.6;
+}
 
-.login-err { color: #b91c1c; font-size: var(--fs-cap); min-height: 1.125rem; margin-bottom: var(--sp-2); }
-.login-btn { width: 100%; }
-.login-switch { font-size: var(--fs-cap); color: var(--ink-muted); text-align: center; margin-top: var(--sp-3); }
+.login-err {
+  color: #b91c1c;
+  font-size: var(--fs-cap);
+  min-height: 1.125rem;
+  margin-bottom: var(--sp-2);
+}
+.login-btn {
+  width: 100%;
+}
+.login-switch {
+  font-size: var(--fs-cap);
+  color: var(--ink-muted);
+  text-align: center;
+  margin-top: var(--sp-3);
+}
 .login-foot {
-  margin-top: var(--sp-5); padding-top: var(--sp-3);
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-3);
   border-top: 1px solid var(--line-soft);
-  font-size: var(--fs-cap); color: var(--ink-faint); text-align: center; line-height: 1.7;
+  font-size: var(--fs-cap);
+  color: var(--ink-faint);
+  text-align: center;
+  line-height: 1.7;
 }
 </style>

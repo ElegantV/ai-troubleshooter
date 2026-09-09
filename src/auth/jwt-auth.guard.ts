@@ -2,6 +2,7 @@ import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from
 import { Reflector } from '@nestjs/core';
 import { AuthService } from './auth.service';
 import { IS_PUBLIC_KEY } from '../common/decorators/auth.decorators';
+import { logCtx } from '../common/logger/pino.module';
 
 /**
  * 全局 JWT 鉴权：默认所有接口需登录；@Public() 标注的接口跳过。
@@ -23,6 +24,9 @@ export class JwtAuthGuard implements CanActivate {
     const payload = this.auth.verify(token);
     req.user = { username: payload.sub, display_name: payload.name, role: payload.role, system_code: payload.sys || '' };
     req.token = token;
+    // 业务日志自动关联操作人（requestId 由中间件写入同一上下文）
+    const store = logCtx.getStore();
+    if (store) store.userId = req.user.username;
     return true;
   }
 }

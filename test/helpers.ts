@@ -1,10 +1,10 @@
 import { Knex } from 'knex';
+import * as fs from 'fs';
+import * as path from 'path';
 import { DatabaseModule } from '../src/infra/database/database.module';
 import configuration from '../src/config/configuration';
 import { collectAll } from '../src/collector/collect';
 import { GraphQueryService } from '../src/agent/graph-query.service';
-import { up as initUp } from '../src/infra/database/migrations/202609040001_init';
-import { up as sysUp } from '../src/infra/database/migrations/202609040002_systems';
 
 export interface TestCtx {
   db: Knex;
@@ -15,6 +15,7 @@ export interface TestCtx {
 /**
  * 建测试上下文：连接 assistant_test，重建全表（down→up）+ 用 data/raw 灌入知识库，加载图服务。
  * 迁移直接调用迁移函数（vitest ESM 下 knex 自带加载器无法 require TS 迁移文件）。
+ * 自动按文件名顺序加载 migrations/ 下全部迁移，新增迁移无需改此处。
  */
 export async function createTestCtx(): Promise<TestCtx> {
   const { app } = configuration();
@@ -22,8 +23,15 @@ export async function createTestCtx(): Promise<TestCtx> {
   // 测试库整库重建（干净、幂等），再按顺序应用全部迁移
   await db.raw('DROP SCHEMA public CASCADE');
   await db.raw('CREATE SCHEMA public');
-  await initUp(db);
-  await sysUp(db);
+  const migrationDir = path.join(__dirname, '..', 'src', 'infra', 'database', 'migrations');
+  const files = fs
+    .readdirSync(migrationDir)
+    .filter((f) => f.endsWith('.ts'))
+    .sort();
+  for (const f of files) {
+    const mod = await import(path.join(migrationDir, f));
+    await mod.up(db);
+  }
   await collectAll(db, app.rawDir);
   const graph = new GraphQueryService(db);
   await graph.load();

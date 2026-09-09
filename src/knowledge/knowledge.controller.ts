@@ -1,7 +1,10 @@
-import { Inject, Controller, Get } from '@nestjs/common';
+import { Inject, Controller, Get, Res } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Response } from 'express';
 import { Knex } from 'knex';
+import Redis from 'ioredis';
 import { KNEX } from '../infra/database/database.module';
+import { REDIS } from '../infra/redis/redis.module';
 import { GraphQueryService } from '../agent/graph-query.service';
 import { Public } from '../common/decorators/auth.decorators';
 
@@ -113,7 +116,41 @@ export class KnowledgeController {
 @Public()
 @Controller('api/health')
 export class HealthController {
-  constructor(@Inject(KNEX) private readonly db: Knex) {}
+  constructor(
+    @Inject(KNEX) private readonly db: Knex,
+    @Inject(REDIS) private readonly redis: Redis,
+  ) {}
+
+  /** liveness：进程存活即 200（K8s livenessProbe / Docker HEALTHCHECK 用） */
+  @Get('live')
+  @ApiOperation({ summary: '存活探针（进程活着即 OK）' })
+  live() {
+    return { ok: true, uptime: Math.round(process.uptime()) };
+  }
+
+  /** readiness：依赖就绪才 200，否则 503（K8s readinessProbe / 网关摘流量用） */
+  @Get('ready')
+  @ApiOperation({ summary: '就绪探针（DB + Redis 探测，失败返回 503）' })
+  async ready(@Res({ passthrough: true }) res: Response) {
+    const checks: Array<{ name: string; ok: boolean; detail?: string }> = [];
+    try {
+      await this.db.raw('SELECT 1');
+      checks.push({ name: 'postgres', ok: true });
+    } catch (e) {
+      checks.push({ name: 'postgres', ok: false, detail: (e as Error).message });
+    }
+    try {
+      // 连接未就绪时主动拉起（重连策略已在 Redis 连接层配置）
+      if (this.redis.status !== 'ready') await this.redis.connect();
+      const pong = await this.redis.ping();
+      checks.push({ name: 'redis', ok: pong === 'PONG' });
+    } catch (e) {
+      checks.push({ name: 'redis', ok: false, detail: (e as Error).message });
+    }
+    const ok = checks.every((c) => c.ok);
+    if (!ok) res.status(503);
+    return { status: ok ? 200 : 503, ok, checks };
+  }
 
   @Get()
   @ApiOperation({ summary: '服务与知识库探活' })

@@ -14,6 +14,8 @@ import { KnowledgeModule } from './knowledge/knowledge.module';
 import { CollectorModule } from './collector/collector.module';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { PinoLoggerModule, PinoLoggerService } from './common/logger/pino.module';
+import { RateLimitModule } from './common/services/rate-limit.module';
 
 @Module({
   imports: [
@@ -26,6 +28,8 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
     AuditModule,
     KnowledgeModule,
     CollectorModule,
+    PinoLoggerModule,
+    RateLimitModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

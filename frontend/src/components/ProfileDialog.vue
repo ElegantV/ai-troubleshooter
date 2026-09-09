@@ -1,5 +1,13 @@
 <template>
-  <el-dialog v-model="visible" title="个人资料" class="profile-dlg" body-class="profile-dlg-body" width="min(24rem, 92vw)" top="7vh" destroy-on-close>
+  <el-dialog
+    v-model="visible"
+    title="个人资料"
+    class="profile-dlg"
+    body-class="profile-dlg-body"
+    width="min(24rem, 92vw)"
+    top="7vh"
+    destroy-on-close
+  >
     <div class="dlg-sec">基本资料</div>
     <el-form label-position="top" @submit.prevent>
       <el-form-item label="登录名">
@@ -10,7 +18,13 @@
         <el-input v-model="form.display_name" maxlength="32" />
       </el-form-item>
       <el-form-item label="所属系统（用于按系统收敛检索）">
-        <el-select v-model="form.system_code" clearable filterable placeholder="共享/公共（不限定系统）" style="width:100%">
+        <el-select
+          v-model="form.system_code"
+          clearable
+          filterable
+          placeholder="共享/公共（不限定系统）"
+          style="width: 100%"
+        >
           <el-option v-for="s in systems" :key="s.code" :label="`${s.name}（${s.code}）`" :value="s.code" />
         </el-select>
       </el-form-item>
@@ -47,49 +61,75 @@ const saving = ref(false);
 const savingPwd = ref(false);
 const systems = ref([]);
 
-watch(visible, v => {
+watch(visible, (v) => {
   if (!v || !auth.user) return;
   form.username = auth.user.username;
   form.display_name = auth.user.display_name || '';
   form.system_code = auth.user.system_code || '';
   pwd.old_password = pwd.new_password = pwd.confirm = '';
-  api('/systems').then(s => (systems.value = s)).catch(() => {});
+  api('/systems')
+    .then((s) => (systems.value = s))
+    .catch(() => {});
 });
 
 async function saveProfile() {
-  if (!form.username.trim()) { ElMessage.warning('登录名不能为空'); return; }
+  if (!form.username.trim()) {
+    ElMessage.warning('登录名不能为空');
+    return;
+  }
   saving.value = true;
   try {
     await updateProfile({ ...form });
     ElMessage.success('资料已保存');
     visible.value = false;
-  } catch (e) { ElMessage.error(e.message); }
+  } catch (e) {
+    ElMessage.error(e.message);
+  }
   saving.value = false;
 }
 
 async function savePassword() {
-  if (!pwd.old_password || !pwd.new_password) { ElMessage.warning('请输入当前密码和新密码'); return; }
-  if (pwd.new_password !== pwd.confirm) { ElMessage.warning('两次输入的新密码不一致'); return; }
+  if (!pwd.old_password || !pwd.new_password) {
+    ElMessage.warning('请输入当前密码和新密码');
+    return;
+  }
+  if (pwd.new_password !== pwd.confirm) {
+    ElMessage.warning('两次输入的新密码不一致');
+    return;
+  }
   savingPwd.value = true;
   try {
     await changePassword({ old_password: pwd.old_password, new_password: pwd.new_password });
     ElMessage.success('密码已更新');
     pwd.old_password = pwd.new_password = pwd.confirm = '';
-  } catch (e) { ElMessage.error(e.message); }
+  } catch (e) {
+    ElMessage.error(e.message);
+  }
   savingPwd.value = false;
 }
 </script>
 
 <style scoped>
-.field-hint { font-size: var(--fs-cap); color: var(--ink-faint); line-height: 1.6; margin-top: var(--sp-1); }
-.dlg-sec { font-size: var(--fs-title); font-weight: 600; color: var(--brand-deep); margin-bottom: var(--sp-3); }
+.field-hint {
+  font-size: var(--fs-cap);
+  color: var(--ink-faint);
+  line-height: 1.6;
+  margin-top: var(--sp-1);
+}
+.dlg-sec {
+  font-size: var(--fs-title);
+  font-weight: 600;
+  color: var(--brand-deep);
+  margin-bottom: var(--sp-3);
+}
 </style>
 
 <style>
 /* 资料弹窗：限高 + 内容区内部滚动（弹窗可能被 teleport，样式不走 scoped） */
 .profile-dlg.el-dialog {
   max-height: 86vh;
-  display: flex; flex-direction: column;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   margin-bottom: 0;
   padding: 0;
@@ -99,12 +139,20 @@ async function savePassword() {
   padding: var(--el-dialog-padding-primary) var(--pad-panel) var(--sp-3);
   border-bottom: 1px solid var(--line-soft);
 }
-.profile-dlg .el-dialog__headerbtn { top: var(--el-dialog-padding-primary); right: var(--pad-panel); }
+.profile-dlg .el-dialog__headerbtn {
+  top: var(--el-dialog-padding-primary);
+  right: var(--pad-panel);
+}
 .profile-dlg-body {
-  flex: 1 1 auto; min-height: 0;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   padding: var(--sp-4) var(--pad-panel) var(--pad-panel);
 }
-.profile-dlg .el-divider { margin: var(--sp-5) 0 var(--sp-4); }
-.profile-dlg .el-button { width: 100%; }
+.profile-dlg .el-divider {
+  margin: var(--sp-5) 0 var(--sp-4);
+}
+.profile-dlg .el-button {
+  width: 100%;
+}
 </style>

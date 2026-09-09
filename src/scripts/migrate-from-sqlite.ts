@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { DatabaseModule } from '../infra/database/database.module';
 import configuration from '../config/configuration';
+import { caseDedupeKey } from '../case/case.service';
 
 /**
  * 一次性迁移：SQLite(data/assistant.db) → PostgreSQL
@@ -15,6 +16,10 @@ async function main() {
       const rows = src.prepare(`SELECT ${cols.join(',')} FROM ${table}`).all() as any[];
       if (!rows.length) { console.log(`${table}: 无数据`); return; }
       const inserts = rows.map((r) => Object.fromEntries(cols.map((c) => [c, r[c]])));
+      // cases 需要回填去重键，否则无法满足 ux_cases_dedupe_key 唯一约束
+      if (table === 'cases') {
+        for (const r of inserts) r.dedupe_key = caseDedupeKey(String(r.symptom || ''), String(r.root_cause || ''));
+      }
       await db(table).insert(inserts);
       console.log(`${table}: 迁移 ${rows.length} 条`);
     };

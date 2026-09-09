@@ -42,9 +42,23 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
           this.logger.log(`定时采集触发 (job ${job.id})`);
           await this.collector.refresh();
         },
-        { connection },
+        {
+          connection,
+        },
       );
-      await this.queue.upsertJobScheduler('collect-schedule', { every: app.collectionIntervalMinutes * 60_000 }, { name: 'collect' });
+      // 失败监听：重试耗尽后告警留痕（生产可接到监控/钉钉/webhook）
+      this.worker.on('failed', (job, err) => {
+        this.logger.error(
+          `定时采集失败（已重试 ${(job?.attemptsMade || 0)} 次，耗尽重试）: ${err.message}`,
+          err.stack,
+        );
+      });
+      // 重试策略：最多 3 次尝试，指数退避（30s → 1m → 2m），避免瞬时故障直接丢任务
+      await this.queue.upsertJobScheduler(
+        'collect-schedule',
+        { every: app.collectionIntervalMinutes * 60_000 },
+        { name: 'collect', opts: { attempts: 3, backoff: { type: 'exponential', delay: 30_000 } } },
+      );
       this.logger.log(`定时采集已注册：每 ${app.collectionIntervalMinutes} 分钟`);
     } catch (e) {
       this.logger.warn(`Redis/BullMQ 不可用，定时采集降级：${(e as Error).message}`);

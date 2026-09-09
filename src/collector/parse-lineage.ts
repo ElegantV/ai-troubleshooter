@@ -37,18 +37,20 @@ export function parseProcedure(sql: string, procName: string): LineageEdge[] {
   return edges;
 }
 
-/** 解析 data/raw/stored_procedures 下所有存储过程，并做图融合 → 表级血缘（附产出作业） */
+/**
+ * 解析 data/raw/stored_procedures 下所有存储过程，并做图融合 → 表级血缘（附产出作业）。
+ * 由 collectAll 在事务内调用：proc_lineage / table_lineage 的清空由事务统一处理，失败整体回滚。
+ */
 export async function parseAllProcedures(db: Knex, rawDir: string): Promise<void> {
-  await db('proc_lineage').del();
-  await db('table_lineage').del();
   const dir = path.join(rawDir, 'stored_procedures');
+  const edges: LineageEdge[] = [];
   for (const f of fs.readdirSync(dir).filter((f) => f.endsWith('.sql'))) {
     const sql = fs.readFileSync(path.join(dir, f), 'utf8');
     const nameM = /CREATE\s+PROCEDURE\s+([a-zA-Z_][\w]*)/i.exec(sql);
     const procName = nameM ? nameM[1].toLowerCase() : f.replace(/\.sql$/i, '');
-    const edges = parseProcedure(sql, procName);
-    if (edges.length) await db('proc_lineage').insert(edges);
+    edges.push(...parseProcedure(sql, procName));
   }
+  if (edges.length) await db('proc_lineage').insert(edges);
   // 图融合：proc 血缘 × 调度 DAG → 表级血缘（附产出作业）
   const fused = await db('proc_lineage as pl')
     .select('pl.src_table', 'pl.tgt_table', 'pl.proc_name', 'j.job_name as via_job')

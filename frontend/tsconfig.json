@@ -1,0 +1,10 @@
+{
+  "extends": "@vue/tsconfig/tsconfig.dom.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "types": ["vite/client"]
+  },
+  "include": ["src/**/*", "auto-imports.d.ts", "components.d.ts"]
+}

@@ -27,6 +27,16 @@ export interface LlmAnalysisResult {
   steps: string[];
 }
 
+/** LLM 重试策略：最多 3 次尝试，退避基数 1s（1s → 2s → 4s） */
+const LLM_MAX_ATTEMPTS = 3;
+const LLM_RETRY_BASE_MS = 1000;
+const LLM_RETRY_MAX_MS = 4000;
+
+/** 4xx 为永久性错误（密钥无效/模型不存在/上下文超限），重试无意义 */
+function isPermanentLlmError(e: unknown): boolean {
+  return typeof e === 'object' && e !== null && Number((e as { status?: unknown }).status) >= 400 && Number((e as { status?: unknown }).status) < 500;
+}
+
 const SYSTEM_PROMPT = `你是数据仓库运维专家，负责对批量作业失败与数据异常给出可解释、可审计的分析。
 下面给出的【知识库上下文】全部来自真实系统数据（规则引擎候选原因、历史工单/案例、表结构、作业状态）。你必须严格基于这些事实分析，不得编造上下文之外的内容。
 输出要求：只输出一个 JSON 对象（不要 markdown 代码块，不要任何多余文字），字段如下：
@@ -102,6 +112,28 @@ export class LlmService {
 
   async chat(messages: ChatMessage[], temperature = 0.2): Promise<string | null> {
     if (!this.llm.enabled || !this.llm.baseUrl) return null;
+    // 瞬时故障（网络/超时/5xx）指数退避重试；4xx 为永久性错误不重试
+    let lastErr: Error | undefined;
+    for (let attempt = 1; attempt <= LLM_MAX_ATTEMPTS; attempt++) {
+      try {
+        return await this.chatOnce(messages, temperature);
+      } catch (e) {
+        lastErr = e as Error;
+        if (isPermanentLlmError(e)) {
+          this.logger.warn(`LLM 永久性错误，放弃重试：${lastErr.message}`);
+          break;
+        }
+        if (attempt < LLM_MAX_ATTEMPTS) {
+          const delay = Math.min(LLM_RETRY_BASE_MS * 2 ** (attempt - 1), LLM_RETRY_MAX_MS);
+          this.logger.warn(`LLM 请求失败（第 ${attempt}/${LLM_MAX_ATTEMPTS} 次），${delay}ms 后重试：${lastErr.message}`);
+          await new Promise((r) => setTimeout(r, delay));
+        }
+      }
+    }
+    throw lastErr;
+  }
+
+  private async chatOnce(messages: ChatMessage[], temperature = 0.2): Promise<string | null> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.llm.timeoutMs);
     try {
@@ -111,7 +143,11 @@ export class LlmService {
         body: JSON.stringify({ model: this.llm.model, messages, temperature }),
         signal: controller.signal,
       });
-      if (!resp.ok) throw new Error(`LLM ${resp.status}: ${await resp.text()}`);
+      if (!resp.ok) {
+        const err = new Error(`LLM ${resp.status}: ${(await resp.text()).slice(0, 500)}`) as Error & { status?: number };
+        err.status = resp.status;
+        throw err;
+      }
       const data = await resp.json();
       return data.choices?.[0]?.message?.content ?? null;
     } catch (e) {

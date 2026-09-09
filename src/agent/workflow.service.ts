@@ -9,6 +9,7 @@ import { ProcAnalysisService } from './proc-analysis.service';
 import { RetrievalService, SearchHit } from './retrieval.service';
 import { VerifySqlService } from './verify-sql.service';
 import { LlmService, LlmAnalysisContext, LlmAnalysisResult } from './llm.service';
+import { caseDedupeKey } from '../case/case.service';
 
 export interface ReportSection {
   key: string;
@@ -219,30 +220,48 @@ export class WorkflowService {
   ): Promise<{ ok: boolean; caseId?: string; message: string }> {
     const row = await this.db('query_log').where({ query_id }).first();
     if (!row) return { ok: false, message: '查询记录不存在' };
-    await this.db('query_log')
-      .where({ query_id })
-      .update({ helpful, confirmed_cause: confirmed_cause || '', feedback_at: new Date().toISOString() });
+    // 反馈状态与案例沉淀放同一事务：要么都成功，要么都不生效
+    return this.db.transaction(async (trx) => {
+      await trx('query_log')
+        .where({ query_id })
+        .update({ helpful, confirmed_cause: confirmed_cause || '', feedback_at: new Date().toISOString() });
 
-    if (helpful === 'yes' && confirmed_cause) {
-      const ent = JSON.parse(row.entities_json);
-      const report = JSON.parse(row.report_json);
-      const caseId = 'CASE-' + Date.now();
-      const solution = note || report.sections.find((s: any) => s.key === 'solution')?.items?.join('；') || '';
-      await this.db('cases').insert({
-        case_id: caseId,
-        symptom: row.input_text,
-        root_cause: confirmed_cause,
-        solution,
-        related_jobs: JSON.stringify(ent.jobs || []),
-        related_tables: JSON.stringify(ent.tables || []),
-        error_code: ent.errorCode || '',
-        source: '用户反馈沉淀',
-        created_at: new Date().toISOString(),
-        created_by: user || row.user_name || '',
-        system_code: systemCode || '',
-      });
-      return { ok: true, caseId, message: `反馈已记录，并已沉淀为案例 ${caseId}，后续排查将自动关联` };
-    }
-    return { ok: true, message: '反馈已记录' };
+      if (helpful === 'yes' && confirmed_cause) {
+        const ent = JSON.parse(row.entities_json);
+        const report = JSON.parse(row.report_json);
+        const dedupeKey = caseDedupeKey(row.input_text, confirmed_cause);
+        // 相同 现象+确认原因 已沉淀过则跳过，避免数据飞轮重复造案例
+        const existed = await trx('cases').where({ dedupe_key: dedupeKey }).first();
+        if (existed) {
+          return { ok: true, message: `反馈已记录（相同现象+原因已有案例 ${existed.case_id}，未重复沉淀）` };
+        }
+        const caseId = 'CASE-' + Date.now();
+        const solution = note || report.sections.find((s: any) => s.key === 'solution')?.items?.join('；') || '';
+        try {
+          await trx('cases').insert({
+            case_id: caseId,
+            symptom: row.input_text,
+            root_cause: confirmed_cause,
+            solution,
+            related_jobs: JSON.stringify(ent.jobs || []),
+            related_tables: JSON.stringify(ent.tables || []),
+            error_code: ent.errorCode || '',
+            source: '用户反馈沉淀',
+            created_at: new Date().toISOString(),
+            created_by: user || row.user_name || '',
+            system_code: systemCode || '',
+            dedupe_key: dedupeKey,
+          });
+        } catch (e) {
+          // 并发重复反馈触发的唯一约束冲突（23505）→ 同样优雅返回，反馈仍已记录
+          if ((e as { code?: string }).code === '23505') {
+            return { ok: true, message: '反馈已记录（相同现象+原因已有案例，未重复沉淀）' };
+          }
+          throw e;
+        }
+        return { ok: true, caseId, message: `反馈已记录，并已沉淀为案例 ${caseId}，后续排查将自动关联` };
+      }
+      return { ok: true, message: '反馈已记录' };
+    });
   }
 }

@@ -71,6 +71,32 @@ private async jobStatusMap(date: string): Promise<Map<string, JobRunRow>> {
     return this.db<LogRow>('batch_logs').where({ run_date: date, job_name: job, level: 'WARN' }).orderBy('line_no');
   }
 
+  /** 批量错误日志（一次 SQL 取回多作业），避免逐上游节点 N+1 */
+  private async batchJobErrorLogs(date: string, jobs: string[]): Promise<LogRow[]> {
+    if (!jobs.length) return [];
+    return this.db<LogRow>('batch_logs')
+      .where({ run_date: date })
+      .whereIn('job_name', jobs)
+      .andWhere((q) => q.where('level', 'ERROR').orWhere('message', 'LIKE', '%SKIPPED%'))
+      .orderBy('line_no');
+  }
+
+  /** 批量告警日志（一次 SQL 取回多作业） */
+  private async batchJobWarnLogs(date: string, jobs: string[]): Promise<LogRow[]> {
+    if (!jobs.length) return [];
+    return this.db<LogRow>('batch_logs').where({ run_date: date, level: 'WARN' }).whereIn('job_name', jobs).orderBy('line_no');
+  }
+
+  private groupByJob(rows: LogRow[]): Map<string, LogRow[]> {
+    const m = new Map<string, LogRow[]>();
+    for (const r of rows) {
+      const list = m.get(r.job_name) || [];
+      list.push(r);
+      m.set(r.job_name, list);
+    }
+    return m;
+  }
+
   private async errorCodeInfo(code: string) {
     return this.db('error_codes').where({ code }).first();
   }
@@ -100,9 +126,10 @@ private async jobStatusMap(date: string): Promise<Map<string, JobRunRow>> {
     // C1 上游依赖未就绪
     if (run?.final_status === 'SKIPPED' || badUpstream.length) {
       const ev: string[] = [];
+      const errsByJob = this.groupByJob(await this.batchJobErrorLogs(date, badUpstream.map((u) => u.node)));
       for (const u of badUpstream) {
         const s = statusMap.get(u.node);
-        const errs = (await this.jobErrorLogs(date, u.node)).slice(0, 2).map((e) => e.message);
+        const errs = (errsByJob.get(u.node) || []).slice(0, 2).map((e) => e.message);
         ev.push(`${u.node}（${u.depth}级上游）当日状态: ${s?.final_status || '无记录'}${errs.length ? '，日志: ' + errs.join(' | ') : ''}`);
       }
       if (run?.final_status === 'SKIPPED') ev.unshift(`作业 ${target} 当日被调度跳过（SKIPPED）`);
@@ -115,10 +142,12 @@ private async jobStatusMap(date: string): Promise<Map<string, JobRunRow>> {
     }
 
     // C2 错误码归因（本作业及其上游的 ERROR/WARN 线索）
+    const upstreamNodes = upstream.map((u) => u.node);
     const focusLogs = [
       ...(await this.jobErrorLogs(date, target)),
-      ...(await Promise.all(badUpstream.map((u) => this.jobErrorLogs(date, u.node)))).flat(),
+      ...(await this.batchJobErrorLogs(date, badUpstream.map((u) => u.node))),
     ];
+    const warnByJob = this.groupByJob(await this.batchJobWarnLogs(date, upstreamNodes));
     const codes = [...new Set(focusLogs.map((l) => l.error_code).filter(Boolean))];
     for (const code of codes) {
       const info = await this.errorCodeInfo(code);
@@ -129,7 +158,7 @@ private async jobStatusMap(date: string): Promise<Map<string, JobRunRow>> {
         ...focusLogs.filter((l) => l.error_code === code).slice(0, 2).map((l) => `日志佐证 [${l.ts}] ${l.job_name}: ${l.message}`),
       ];
       for (const u of upstream) {
-        for (const w of await this.jobWarnLogs(date, u.node)) {
+        for (const w of warnByJob.get(u.node) || []) {
           if (/缺失|变更|异常|重发/.test(w.message)) ev.push(`上游告警 [${w.ts}] ${u.node}: ${w.message}`);
         }
       }
@@ -220,11 +249,16 @@ private async jobStatusMap(date: string): Promise<Map<string, JobRunRow>> {
     const producers = this.graph.producersOf(table);
     const consumers = this.graph.consumersOf(table);
 
-    // C1 产出作业当日未正常产出
+    // C1 产出作业当日未正常产出（批量预取日志与前日行数，避免逐作业 N+1）
+    const errsByJob = this.groupByJob(await this.batchJobErrorLogs(date, producers));
+    const prevRuns = prevDate
+      ? await this.db<JobRunRow>('job_runs').where('run_date', prevDate).whereIn('job_name', producers)
+      : [];
+    const prevByJob = new Map(prevRuns.map((r) => [r.job_name, r]));
     for (const job of producers) {
       const s = statusMap.get(job);
       if (!s || s.final_status !== 'SUCCESS') {
-        const errs = (await this.jobErrorLogs(date, job)).slice(0, 2).map((e) => `[${e.ts}] ${e.message}`);
+        const errs = (errsByJob.get(job) || []).slice(0, 2).map((e) => `[${e.ts}] ${e.message}`);
         causes.push({
           type: '产出缺失',
           score: 9.5,
@@ -238,7 +272,7 @@ private async jobStatusMap(date: string): Promise<Map<string, JobRunRow>> {
       } else {
         // C2 产出正常但上游数据量骤降
         if (prevDate && s.rows_loaded) {
-          const prev = await this.db<JobRunRow>('job_runs').where('run_date', prevDate).andWhere('job_name', job).first();
+          const prev = prevByJob.get(job);
           if (prev?.rows_loaded && Math.abs(s.rows_loaded - prev.rows_loaded) / prev.rows_loaded > 0.3) {
             const pct = ((s.rows_loaded - prev.rows_loaded) / prev.rows_loaded * 100).toFixed(1);
             causes.push({
